@@ -1,0 +1,314 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Introduction to C64 crossdevelopment by Cadaver
+-----------------------------------------------
+
+Welcome to the very first rant at <a href="http://covertbitops.c64.org" target="_top">http://covertbitops.c64.org</a>, about
+crossdeveloping for the C64 and the methods I personally use (not
+necessarily most recommended)
+
+
+0. Background
+
+Some of the opinions in this rant are quite radical. To have some background
+to them I'll first give my short C64 history:
+
+- 1986 Got hands on a C64
+- 1987 BASIC experiments
+- 1988-1991 Assembly language experiments. Not much achieved, all bigger
+projects are unfinished. (part of it can be blamed on primitive tools:
+SEUCK and MikroAssembler)
+- 1992- Mostly only playing on C64 from this point onwards
+- 1995 Discovered C64 emulation
+- 1996 or 1997 C64 stops working
+- 1998 Got idea of crossdevelopment by researching the internet; work
+  on Metal Warrior game started; unforeseen levels of C64 productivity
+- 1999-2000 Crossdevelopment, crossdevelopment, crossdevelopment
+- 2001- Acquired working C64 hardware again, crossdevelopment continues...
+
+So, basically I have crossdevelopment to thank for all my C64 achievements
+worth mentioning.
+
+
+1. What is crossdevelopment
+
+Crossdevelopment is using a different (usually, more powerful) platform than
+the target platform for running some or all of the programs used in
+development. (assembler, text editor, possibly graphics/music editor)
+
+Advantages of C64 crossdevelopment:
+
+- Shorter compile times because of CPU power
+
+- Batch files or makefiles can automatize compiling process
+
+- Editing can be easier or faster on modern utilities (for example a PC
+  based text editor for writing source code)
+
+- Files on a harddisk are easier to manage, as well as more reliably
+  stored than on floppy disk (though, some people have harddisk-equipped
+  C64s.) In any case, remember the importance of backups!
+
+Disadvantages of C64 crossdevelopment:
+
+- If testing on an emulator, remember that graphics (TV image blurriness!) &
+  sound emulation are not 100% accurate yet, and probably will never be.
+  Processor- & chip-emulation are very accurate nowadays in good emulators (for
+  example CCS64, VICE). If your program runs in both CCS64 & VICE you can
+  be 99% sure that it will also on real C64.
+
+  Be careful with custom disk-routines! (fastloaders etc.) If using emulators,
+  test them under both VICE (using several emulated drive-models) & CCS64
+  to be 99% sure it works. To be 100% sure, test on real C64. I have
+  firsthand experience of an unknown drivecode-related bug that appeared
+  on CCS64 & real C64 but not on VICE.
+
+- If testing on a real C64, some effort is required to transfer the
+  program over (for example, with Star Commander and an X1541 cable). But
+  I strongly recommend testing on real C64, whenever possible!
+
+- Making small test changes to code & data (for example with a freezer
+  cartridge) during run-time can be more convenient than recompiling the
+  project within the crossdevelopment-system.
+
+Crossdevelopment can also be "mixed": for example a C64 emulator is run to
+use C64 based graphics & music editors. The resulting datafiles are then
+extracted from a D64 disk-image as needed (VICE has also the possibility to
+"mount" a hard disk directory directly; no need for disk images)
+
+
+2. My principles and tools
+
+My crossdevelopment principle is very extreme but it is the most efficient
+for me personally. Simply put, it is:
+
+- No C64-based utilities are used in development
+
+At first glance this seems extremely crazy, when one is developing a C64
+program it would seem logical to use the tried & true utilities, at least for
+some tasks. Here follows my personal solutions for each front: (not always
+obeying the rule 100%)
+
+
+2.1 The source code
+
+I use TSE (DOS based editor, great keyboard commands) to edit the source code,
+splitting source code to multiple files based on their purposes (for example
+all raster interrupt code goes to one file, all scrolling code goes to another) to keep things manageable.
+
+Also, with the memory not being a concern like in C64 based combined editor/
+assemblers (Turboassembler for example) I can comment as much as I want and
+use as long label names as needed.
+
+Recently I've also been experimenting with the Windows-based ConTEXT editor.
+
+
+2.2 Background and sprite graphics
+
+Drawing sprites is usually a generic task, it is quite the same from project to
+project. Therefore a C64 based sprite editor would usually fit the task just
+fine, without need for any customizations (for example the SEUCK sprite editor)
+
+However, in background graphics problems quickly arise. SEUCK would be fine
+for simple scrolling games, but
+
+- It is limited to vertical-scrolling backgrounds only
+
+- Blocks are 5x5 chars. What if you want 4x4?
+
+So, it is likely that a custom utility is needed. I have no doubt that I will
+write an editor for a 32-bit platform in C language faster than I could write a
+C64 based editor in assembly language (and an editor written in BASIC would be
+intolerably slow for any larger amounts of work, in most cases) This, like
+everything, is a matter of preference. For others it can be faster to write a
+C64 based utility, even in assembly language.
+
+And once I got my first background editor finished, the common routines and
+graphics were also convenient to use for a PC-based sprite editor as well.
+
+If you're interested in coding graphics editors on a 32-bit platform, I
+suggest using the portable <a href="http://www.libsdl.org">SDL library</a> or perhaps my own <a
+href="http://www.student.oulu.fi/~loorni/software/bme.zip">BME library</a>,
+that uses SDL but has some higher-level functionality such as sprites
+already implemented.
+
+
+2.3 Bitmap pictures
+
+I got used to Deluxe Paint during my Amiga programming years. Therefore,
+painting in a Deluxe Paint-style program (nowadays I use GRAFX2 for better
+NT/W2K compatibility) feels most natural to me. So, I set up a C64-like
+palette, a 2x1 grid and brush size and begin painting.
+
+(GRAFX2 is available at <a href="http://www-msi.ensil.unilim.fr/~maritaud/sunset/grafx2.html" target="_top">
+http://www-msi.ensil.unilim.fr/~maritaud/sunset/grafx2.html</a>)
+
+The problem is this: C64 can have only three different colors + background
+color in a character cell. But how I know if I exceed this limit in a non-C64
+paint program? There is no way, except by examining the pixels by eye, or
+testing the picture within a C64 program.
+
+Although work by this method is fast for me even with all testing
+involved, it is not fully satisfying. A PC-based C64 paint program would
+be ideal, but a paint program is a much bigger task than a background
+char-set editor: I'm quite sure I won't write one. I'm also afraid of the flood
+of feature-requests...
+
+For the conversion of IFF/LBM pictures to C64 usable format, I use simple,
+self-written utilities.
+
+I know this method is a bit weird and therefore I'd rather recommend using a
+C64 bitmap paint program. However, it's worth trying once in a lifetime!
+
+
+2.4 Music and sound
+
+Like in the previous chapter, the method I'd recommend most is a C64 based
+editor (mainly because there are so many available) But now let's examine
+what I wanted...
+
+To have maximum control over my programs, I've always preferred using a self-
+written playroutine. Not many playroutines offer sound effect support anyway,
+and many playroutines (with lots of features, but not geared for game use) are
+kind of slow.
+
+So far, I've used 3 options:
+
+- Editing music directly in source code as byte data. Symbolic defines can help
+  this process (for example note names) but still I can't really recommend
+  this method to anyone working today. This is useful if one has to squeeze
+  every last byte out of the music data.
+
+  For example in Metal Warrior 3 memory was extremely tight, so I programmed a
+  "subroutine call" system in the music sequence data. Thus the music data
+  became almost like program code, and possibly source-code editing was
+  even the most efficient way this time.
+
+- Writing a C64 based editor. I did this with SadoTracker, and again with
+  NinjaTracker. Extracting the ready tunes from diskimages was a pain, though
+  (I automated it later)
+
+- GoatTracker. A PC based C64 music editor supporting either reSID emulation
+  or the HardSid.
+
+
+2.5 Assembling
+
+My crossassembler of choice is DASM by Matthew Dillon, but there's a lot of
+good crossassemblers to choose from. Some features I require from an assembler,
+not much really:
+
+- Able to handle big files (practically, the assembler must have been
+compiled with a 32bit C compiler)
+
+- Macro and repeat statement support
+
+- Code generation to different logical vs. physical address; for example code
+  executed in the disk drive or depacker code to be copied into another
+  memory location
+
+- Possibility to include other source code files and raw binary data
+
+So basically the "main program" source code file for my productions looks like
+this:
+
+        processor 6502 ;DASM supports multiple processors
+        org startaddress
+
+        ..main program code here..
+
+        include other_sourcecodefile_1.s
+        include other_sourcecodefile_2.s
+        ...
+        include other_sourcecodefile_n.s
+
+        incbin some_data.bin
+        incbin some_more_data.bin
+
+And the whole program is assembled by giving an instruction like
+
+        dasm program.s -oprogram.prg -p3
+
+(-p3 enables 3 passes for assembly)
+
+
+2.6 Controlling the compile process
+
+A complex production might be composed of many files that are for example
+loaded from disk as needed. So it would be clumsy to have to type all
+assembling & data-manipulation commands by hand each time something needs to
+be changed.
+
+A batch file will do fine in most cases; simply gather all commands required
+to fully compile the program.
+
+But through C programming I've learned a more elegant solution: the use of a
+makefile. A makefile lists the dependencies for all target files and the
+commands needed to create them. The makefile can then executed by a C
+compiler's make utility, and a file is re-created only if some of the files
+it's depending on is changed (saves time). Here's an example of a makefile,
+showing a main program which depends on some source code files and a picture
+file: (using a fictional picture convert utility)
+
+program.prg: picture.raw program.s raster.s screen.s
+        dasm program.s -oprogram.prg
+
+picture.raw: picture.iff
+        convert picture.iff picture.raw
+
+
+2.7 Cross-compression
+
+Don't want to wait minutes or hours for a C64-based packer or cruncher to
+finish? I have a simple advice, use Pucrunch by Pasi 'Albert' Ojala or
+Exomizer by Magnus Lind. They can also be integrated into a loadersystem quite
+easily. Exomizer is more efficient and has smaller decompression routine,
+but compression takes a lot of time.
+
+<a href="http://www.cs.tut.fi/~albert/Dev/pucrunch/">Pucrunch homepage</a>
+<a href="http://w1.131.comhem.se/~u13114991/exo/">Exomizer homepage</a>
+
+
+2.8 Building a diskimage for testing
+
+Now there's a bunch of files sitting on the harddisk that are ready for
+execution/loading on the C64. If there's only one file, the executable, the
+next step is unnecessary; the file can be transferred onto a C64 floppy,
+directly to the C64 with the PC64 cable, or run in an emulator.
+Also, if testing happens exclusively on a real C64, a multi-part program
+can be transferred one file at a time onto a C64 floppy.
+
+But still it's good to know how to build a diskimage. Some methods are:
+
+- Using a program such as Star Commander or 64Copy to create a new D64 image
+  and copy the files to it. As far as I know, this has to be done manually
+  (not very convenient.)
+
+- Using the C1541 program included with the VICE emulator. It includes commands
+  to create & format a new diskimage and copy files onto it. By feeding a
+  command file to the program a diskimage can be built automatically.
+
+- Using some other utility to copy files to a diskimage one by one. Personally
+  I use a self-written program called MAKEDISK that takes a list file of all
+  files to be copied and creates a diskimage from scratch (disk name and
+  sector interleave can be given as command line parameters.)
+
+
+3. Conclusion
+
+This rant has reached its end and all major aspects of crossdevelopment
+have probably been addressed. Remember, all custom utilities mentioned in
+this text are available at the tools section at <a href="http://covertbitops.c64.org" target="_top">http://covertbitops.c64.org</a>
+
+Good luck in C64 development!
+
+
+                                                  Lasse Öörni
+                                                  <a href="mailto:loorni@gmail.com">loorni@gmail.com</a>
+</pre>
+</body>
+</html>

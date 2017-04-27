@@ -1,0 +1,182 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<center>
+
+<p><br><br></p>
+
+<p>
+<img src="wip/logo.gif" alt="Steel Ranger logo">
+<br><br>
+<font face="Arial" size="4">
+Steel Ranger - work in progress
+</font>
+</p>
+
+<table width="600">
+<tr>
+<td>
+<font face="Arial" size="2">
+
+<p align="justify">
+<b>6th April 2017:</b>
+<br><br>
+The one-and-a-half month "coding break" after finishing the charsets has concluded, and it's time to begin creating the final game world layout!<br><br>
+
+Things that got implemented during this period:<br>
+
+<ul>
+<li>Score panel update, including score, health bar, ammo bars and weapon inventory.</li>
+<li>Fuel consumption for player special movement modes.</li>
+<li>Ammo consumption and initial balancing for weapons.</li>
+<li>Doubleclick to enter weapon inventory, plus doubleclick & longpress to enter pause menu, to allow playing with joystick only. This will be an option that can be switched off.</li>
+<li>Picking up items.</li>
+<li>Usable / animating objects in the game world, like switches and doors that open.</li>
+<li>World editor support for placing items, enemies & game world objects.</li>
+<li>Bullets cause damage.</li>
+<li>Lift platforms that you can ride up & down.</li>
+<li>Dynamically loadable code (including relocation according to the load address) for story scripting and enemy movement / AI.</li>
+<li>Map display for the pause menu.</li>
+</ul>
+</p>
+<p align="justify">
+The last four items are of particular interest. MW4 and Hessian both load story & special case code in 2 KB chunks, but only one chunk can be in memory at a time. This limits flexibility and
+causes longer loading breaks at times, since sometimes a complex story interaction might not fit inside a single chunk, on the other hand stuffing them as full as possible is preferable to eliminate wasted
+disk space. But this time the code chunks can be any size, and several of them can be in memory at once, since they are handled with the same general dynamic memory allocation system as sprites
+and level map data (first use in Hessian.) When free memory is exhausted, unused memory chunks are discarded based on which was least recently used.<br><br>
+
+The map display is somewhat familiar from other Metroid-style games, though due to charset and data structure limitations it doesn't show exits from one area to another. Implementing it required a bit of thinking:
+normally the game engine knows only of the currently loaded "level" and the areas, objects and actors inside it. However the map should show the whole world without regard to level breaks. Therefore a minimal global data structure
+of all areas in the game needs to be kept in memory. It's 3 bytes per area: X, Y and size (4 bits for horizontal and 4 for vertical), all expressed in screens. Furthermore,
+a bit per area needs to be stored in the game state to allow showing only visited areas. Finally, a color can be defined for each level to differentiate between different sections of the world map.<br><br>
+
+The lift platforms seemed scary at first, but in the end implementing them was straightforward without much complication or slowdown to the normal case physics / movement / background collision code. The idea is simple: the physics
+code doesn't know of the lift platforms at all. Instead the lift platform's update routine "catches" an actor (player, enemy, item) falling through it, and aligns it back on the platform. Then it sets a flag
+on the actor, which tells the physics to disregard falling for one frame. As long as the actor stays on the platform, the flag gets refreshed on each successive frame. Switches or terminals can call a lift platform even
+from several screens away, which is familiar from MW4. This just requires disabling the "remove offscreen actor" check for as long as the lift is moving.<br><br>
+
+Hessian and MW4 both suffered from errorprone code when handling bullet collision. The bullet actor's update routine would call the "apply damage" subroutine, which would destroy the target actor when out of health, by calling the
+target's "death" routine. This is already several calls deep, and what registers and zeropage temporary variables to allow using in each routine, to avoid trashing the actor update loop when finally returning from the bullet update routine, was not always
+clear. This time the bullet just adds its damage to the target actor's "damage accumulator" variable. It will be read as part of the target's update, so that applying the damage and potential destruction can be handled without nested calls.
+Much safer!<br><br>
+
+Free diskspace is now slightly below 400 blocks, and the resident game code is about 15 KB. It will still grow a bit (e.g. loading / saving the game, and some general helper functions like multi-explosions or basic AI)
+but is nothing compared to the over 20 KB in MW4 and Hessian, which had to include all standard enemy code in there because of the limited loadable code support.<br><br>
+
+Screenshots, not reflecting final content:<br><br>
+<center>
+<img src="wip/ingame7.gif" alt="Map display"><br><br>
+<img src="wip/ingame8.gif" alt="Lift platform & terminals"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
+<b>24th February 2017:</b>
+<br><br>
+All game world charsets (14 total) have been drawn in their initial versions! Changes may be required later as the final game world layout is being composed, but for now it's looking good and it's time
+to get back to coding.<br><br>
+
+The charsets are naturally informed by the story planned for the game, but it was interesting to take note how some of them mutated to something else while being drawn. Mostly, these were ideas that
+felt like they could create good-looking art, or pay homage to other games, but did not actually work well or make sense within the story's internal logic, so they became something more utilitarian.
+Not to worry, there will still be some more esoteric locations especially on the latter half of the game!<br><br>
+
+At this point it's good to get in the habit of watching the remaining diskspace. With all charsets, and about 90 screens worth of test layouts, there's now 423 blocks free on the diskside.
+That's still a lot, but it could be estimated that expanding the game world to 500 screens would take about 160 blocks more away, which doesn't leave *that* much to all the enemies, music, story and intro / outro sequences.
+In case of emergency the game could do the same as MW4: put the main part (with code) to the 1st diskside and all data to the 2nd, but it's preferable to keep it on one diskside if possible, for smoother experience and
+to also simplify the loader code a bit.<br><br>
+
+The world editor has been a pleasure to work in, when not having to worry about individual chars any more. The typical example of a larger shape, a diagonal stairway or slope, becomes almost trivially easy to draw compared
+to the old level editors. Whenever needed, new convenience editing features were easy to add (it's in C++ this time, not C like the old editors.) For example, sometimes you want to make a change in every shape using
+a certain C64 charset char, without having to go through the individual shapes, sort of reverse to the principle of always composing the charset from the shapes. This is possible using an edit mode the editor
+calls "locked edit", which stops the charset dynamic regeneration and allows to paint on the last generated charset, while reflecting the changes back to the affected shapes.<br><br>
+
+The editor is still missing functionality related to placing the game world interactable objects and items / enemies, so that will need to be added later.<br><br>
+
+Here's the last batch of ingame shots from this phase, as well as an editor screenshot showing a charset transition:<br><br>
+<center>
+<img src="wip/ingame5.gif" alt="Recharger units in the machine city mining facilities"><br><br>
+<img src="wip/ingame6.gif" alt="Somewhere deeper below the city"><br><br>
+<img src="wip/worlded.gif" alt="World editor"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
+<b>7th February 2017:</b>
+<br><br>
+Game world charsets are progressing well. The initial pass for 7 full charsets is complete, which should be about halfway done.
+While working on the charsets, some bugs were found (and fixed) from the game code, mostly related to movement & collision. There was also a rather serious memory overwrite bug in the loader, when not using fastloading, which
+was very good to find at this point and not later!<br><br>
+
+Creating the charsets also involves writing animation code, for example waterfalls and flashing cursors on computer terminals. The animation code
+shouldn't take more than a few rasterlines each frame, since it's run in the vertical blank, and if it takes too long, it could affect
+scrolling negatively (color-RAM scrolling is time critical on NTSC.) When there are many separate char animations, and they
+don't need to run on every frame, they can be interleaved on successive frames. For example, if there are two animations that should run
+every fourth frame, the first could run on frames 1, 5, 9... and the second on frames 3, 7, 11.<br><br>
+
+The per-block way of handling background collision has been an unexpected bonus for creativity: it allows to reuse any char for other
+background elements without having to think of the collision flags for that char. In Hessian and the MW games this was not possible, 
+as a unique copy of the char would have been needed.<br><br>
+
+Now to continue to the rest of the charsets, then it's on to coding the remaining functionality to get the interaction with the game world (collecting items, activating objects in the world, shooting enemies) fully operational.<br><br>
+
+Some more shots, including the human military spaceship (lower) which brought you to the machine planet, at the cost of some damage:<br><br>
+<center>
+<img src="wip/ingame3.gif" alt="Machine city tunnels"><br><br>
+<img src="wip/ingame4.gif" alt="Player's crashlanded ship from inside"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
+<b>26th January 2017:</b>
+<br><br>
+New year, and a new work-in-progress page!
+<br><br>
+Steel Ranger will be a Turrican / Metroid inspired action game, with adventure elements. It is a loose sequel to Hessian, with familiar gameplay but hopefully easier
+controls this time.<br><br>
+
+The scenario is set a few hundred years from now. As humanity began to expand its reach through the space to seek a future beyond the dying Earth, 
+it found itself at war with the Throne Group's legacy: rebellious machines who also set their sights on conquering the galaxy, seeing themselves as 
+the next version of mankind, superior in every way to the fragile organic lifeforms. Using a Ranger armor suit, you must confront extreme combat
+on the machines' home planet in hope of turning the tide of war.<br><br>
+
+After finishing Hessian, some time was needed to explore new tech options for a potential new C64 game. Now the exploration is over, and the choices for this game are clear.
+In contrast to Hessian & Metal Warrior games, this game will utilize 2x2 char blocks to allow more precision and freedom in building the game world, as well as speeding up background
+collision checks, since they are done on a per-block basis, without needing to drill down to the char level. Potential downside will be increased memory / disk use.
+Like Hessian, Steel Ranger will run at 50Hz with color-per-char backgrounds, but the scrolling is freedirectional for a smoother feel, and faster scrolling when needed. 
+The aim is to be compatible with both PAL & NTSC, though on NTSC slowdown could occur more easily in heavy action sequences.<br><br>
+
+The game scenario needed some thinking as well. The original plan was a direct sequel to Hessian, picking up from where the story of the game left off, but
+that got abandoned as stronger inspiration came from an unexpected direction: the idea to write Turrican fanfiction for <a href="http://www.nanowrimo.org" target="_top">NaNoWriMo 2017</a>. This idea
+mutated quickly into original fiction and something that felt very inspiring and suitable also for a game. Of course, considering how Turrican is one of the most "holy" games on the C64,
+getting inspiration from it sets the bar for quality rather high!<br><br>
+
+Unlike Turrican, this game too will use sprite bullets instead of char bullets, to preserve the fidelity of the background at all times and allow for more colorful bullets.
+This means that the firepower will not be as extreme in quantity, but using large and fast moving bullet sprites the weapons should yet feel fairly powerful. Firing happens
+to 8 directions just like in Hessian.<br><br>
+
+Current status: player movement and weapons are done. Game world charsets and layout are in progress, using a new world editor tool which allows larger shapes (consisting of
+several blocks if necessary) to be edited and inserted into the world. The C64 charset is dynamically constructed as editing proceeds, discarding duplicate chars and blocks. Due to
+not needing to pixel human-occupied or otherwise realistic locations, the work feels more inspiring and less painful this time!<br><br>
+
+Some early shots:<br><br>
+
+<center>
+<img src="wip/ingame1.gif" alt="Planet surface"><br><br>
+<img src="wip/ingame2.gif" alt="Inside a cave"><br><br>
+</center>
+</p>
+<br><br><br>
+
+</font>
+</td>
+</tr>
+</table>
+
+</center>
+</body>
+</html>

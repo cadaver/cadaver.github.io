@@ -1,0 +1,39 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Creating a 1 player blastem game by Richard Bayliss
+---------------------------------------------------
+
+(part of the <a href="http://www.redizajn.sk/tnd64/assemble_it.html">Assemble It!</a> series)
+
+In this chapter, we are going to be working on a 1 player blasting game. First
+of all. We are going to have a player, bullet and also enemy. This game is
+going to feature sprite animation (unlike the previous game example). Animating
+sprites are not that easy, unless we created a routine, which would read from
+the sprite table and animate these. Here's what you need to do (or just look at
+the example .d64 image). We are going to be placing music at $1000, sprites at
+$2000, charset at $2800. Now using a screen editor or any other tool, draw a
+nice little space background. Save it, and then load it at $3000-$3400. Now do
+the same, but create a simple front end (title). Once you have done this, load
+the Turbo Assembler and then load in the routine. If you are using PC instead
+of turbo assembler, then I have a nice text file with the routine, that you can
+assemble using a cross-assembly program (C64ASM) and you will generate your C64
+file.
+
+If you don't want to create your own sprites, gfx, etc. You don't have to. You
+can load in the game data on the zipped .D64 image, supplied on this page and
+sort of experiment and/or learn how to use my routines. But - don't rip them
+and call these your own work, else I'll be laughing at you and send your game
+release to fake groups to name and shame your work:o) .
+
+Now <a href="missile_code.txt">View Listing</a> or <a href="missile_blasta_source.zip">download the data and source</a>.
+
+
+                                                  Richard Bayliss
+                                                  <a href="mailto:richard@c64.rulez.org">richard@c64.rulez.org</a>
+</pre>
+</body>
+</html>

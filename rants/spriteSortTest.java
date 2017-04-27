@@ -1,0 +1,1389 @@
+import java.math.*;
+import java.util.*;
+
+class consts {
+  public static final int MAXSPRITES = 64; // Number of sprites in our simulation
+  public static final int MAXVALUE = 254; // Maximum Y value for a sprite
+}
+
+interface sortInterface {
+
+  // Return the name of the method
+  public String name ();
+
+  // Called prior to a new round of sorting
+  public void sortInit ();
+
+  // Add sprite to the sorting object
+  // Note that sortInit should be called exactly once prior to any addSprite calls
+  public void addSprite (int index, int y);
+
+  // Sort the sprites stored in the sorting object
+  public void sort ();
+
+  // Return next sprite (in sorted order) from the sorting object
+  public int getNextSprite ();
+
+}
+
+// The bucket sort implementation
+
+class bucketSort
+    implements sortInterface {
+
+  // Constants for this class
+
+  static final int BUCKETS = 128; // Number of available buckets
+
+  static final int HASH =
+      (int) Math.ceil ( (double) consts.MAXVALUE / (double) BUCKETS);
+ 
+  // Note 1: a major speedup can be obtained by fixing the above values and
+  // then optimizing code for these values. A lot of the casting and Math
+  // cals can then be eliminated. Choosing the number of buckets wisely
+  // and then optimizing the ASM can make the sorting process blazingly fast
+  // 128 buckets seems optimal for 32 sprites, giving the best performace times
+  // Bare in mind that more buckets means larger memory usage
+  // If memory is a big issue, use 64 buckets.
+  //
+  // Note 2: Sprite Y values may not use value 255 in this implementation
+  // This was done for reasons of memory optimization... in real C64 life
+  // We would be using 'bytes' and not 'int' values. However, in Java, the
+  // closest thing to a C64 is a int since Java uses signed bytes :(
+ 
+  // Marks a collision list in the bucket map
+  static final int COLLISONMARKER = 254;
+ 
+  // Marks special items in lists, tables, etc
+  static final int MARKER = 255;
+ 
+  // Start of variables
+ 
+  bucketManager Bucket;
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int bucketIndex;
+  int CollisionPointer;
+ 
+  // Helper classes
+ 
+  class collisionList {
+ 
+    int[] spriteTable = new int[consts.MAXSPRITES];
+    int[] spriteYTable = new int[consts.MAXSPRITES];
+    int[] pointerTable = new int[consts.MAXSPRITES];
+ 
+    int freePointer = 0;
+ 
+    public collisionList () {
+      // No need to initialize the spriteTable and indexTable structures
+    }
+ 
+    public void addNewCollision (int spriteIndex1, int spriteY1,
+        int spriteIndex2, int spriteY2) {
+ 
+      // This code is written out entirely for speed optimization
+ 
+      if (spriteY1 < spriteY2) {
+ 
+        spriteTable[freePointer] = spriteIndex1;
+        spriteYTable[freePointer] = spriteY1;
+        pointerTable[freePointer] = (freePointer + 1);
+        freePointer++;
+ 
+        spriteTable[freePointer] = spriteIndex2;
+        spriteYTable[freePointer] = spriteY2;
+        pointerTable[freePointer] = MARKER;
+        freePointer++;
+ 
+      }
+      else {
+ 
+        spriteTable[freePointer] = spriteIndex2;
+        spriteYTable[freePointer] = spriteY2;
+        pointerTable[freePointer] = (freePointer + 1);
+        freePointer++;
+ 
+        spriteTable[freePointer] = spriteIndex1;
+        spriteYTable[freePointer] = spriteY1;
+        pointerTable[freePointer] = MARKER;
+        freePointer++;
+ 
+      }
+ 
+    }
+ 
+    public int addCollision (int Pointer, int spriteIndex, int spriteY) {
+ 
+      // Add entry
+ 
+      spriteTable[freePointer] = spriteIndex;
+      spriteYTable[freePointer] = spriteY;
+ 
+      // Check if this is the new lowest value
+ 
+      if (spriteY < spriteYTable[Pointer]) {
+        pointerTable[freePointer] = Pointer;
+        return freePointer++;
+      }
+ 
+      // Now we need to find the proper position in the linked list
+ 
+      int indexPointer = Pointer;
+ 
+      while (spriteYTable[pointerTable[indexPointer]] < spriteY) {
+ 
+        // If we reach the end of the list we have find a new highest value
+ 
+        if (pointerTable[pointerTable[indexPointer]] == MARKER) {
+          pointerTable[pointerTable[indexPointer]] = freePointer;
+          pointerTable[freePointer++] = MARKER;
+          return Pointer; // Return original starting position
+        }
+ 
+        indexPointer = pointerTable[indexPointer];
+ 
+      }
+ 
+      // We have found an in-between value at this point
+ 
+      int prevPointer = pointerTable[indexPointer];
+      pointerTable[indexPointer] = freePointer;
+      pointerTable[freePointer] = prevPointer;
+ 
+      freePointer++;
+ 
+      return Pointer; // Return original starting position
+ 
+    }
+ 
+  }
+ 
+  class bucketManager {
+ 
+    // Will hold the sprite entries that have been mapped ("hashed") directly
+    int[] Table = new int[BUCKETS];
+ 
+    // This is the collision table itself for colliding sprites
+    collisionList Collisions = new collisionList ();
+ 
+    // Holds pointers to the collision table
+    int[] collisionTable = new int[BUCKETS];
+ 
+    public bucketManager () {
+ 
+      for (int i = 0; i < BUCKETS; i++) {
+        Table[i] = MARKER;
+      }
+ 
+      // No need to initialize any other structures
+
+    }
+
+  }
+ 
+  // Constructor
+ 
+  public bucketSort () {
+ 
+    Bucket = new bucketManager ();
+ 
+    if (consts.MAXVALUE >= MARKER) {
+      throw new RuntimeException ("Internal error (MAXVALUE is too large)");
+    }
+ 
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Bucket sort";
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+    // Reset collision list
+ 
+    Bucket.Collisions.freePointer = 0;
+ 
+    // Reset indices for first call to getNextSprite()
+ 
+    bucketIndex = 0;
+    CollisionPointer = MARKER;
+ 
+  }
+ 
+  // Add sprite to the sorting object
+ 
+  public void addSprite (int index, int y) {
+ 
+    spriteY[index] = y; // Needed for possible later collision resolution
+ 
+    int Hash = (y / HASH); // Using integer division here...
+ 
+    if (Bucket.Table[Hash] == MARKER) {
+ 
+      Bucket.Table[Hash] = index;
+ 
+    }
+    else {
+ 
+      if (Bucket.Table[Hash] == COLLISONMARKER) {
+ 
+        Bucket.collisionTable[Hash] = Bucket.Collisions.addCollision (Bucket.
+                                      collisionTable[Hash], index, y);
+ 
+      }
+      else {
+ 
+        // Create a new collison structure
+ 
+        Bucket.collisionTable[Hash] = Bucket.Collisions.freePointer;
+ 
+        Bucket.Collisions.addNewCollision (
+            Bucket.Table[Hash], spriteY[Bucket.Table[Hash]], index, y);
+ 
+        Bucket.Table[Hash] = COLLISONMARKER;
+ 
+      }
+ 
+    }
+ 
+  }
+ 
+  // Sort sprites... but already done!
+ 
+  public void sort () {
+ 
+    // All the hard work is actually done in addSprite!!
+ 
+  }
+ 
+  // Get the next sprite in sorted order
+ 
+  public int getNextSprite () {
+ 
+    int Index;
+ 
+    // If we are draining from the collision list, continue to do so...
+ 
+    if (CollisionPointer != MARKER) {
+ 
+      Index = Bucket.Collisions.spriteTable[CollisionPointer];
+      CollisionPointer = Bucket.Collisions.pointerTable[CollisionPointer];
+      return Index;
+ 
+    }
+ 
+    // Otherwise, continue to drain from the bucket table...
+ 
+    while (Bucket.Table[bucketIndex] == MARKER) {
+      bucketIndex++;
+    }
+ 
+    Index = Bucket.Table[bucketIndex];
+ 
+    // Clear the entry prior to return (so next sort iteration needs not to clean)
+    Bucket.Table[bucketIndex] = MARKER;
+
+    if (Index != COLLISONMARKER) {
+ 
+      // Just return the sprite index since this is not at a collison marker
+      bucketIndex++;
+      return Index;
+ 
+    }
+ 
+    // Oops, found a collison marker... need to drain the collison list now
+ 
+    if (Index == COLLISONMARKER) {
+ 
+      CollisionPointer = Bucket.collisionTable[bucketIndex];
+      bucketIndex++;
+      return getNextSprite (); // Fetch the first sprite from the collison list
+ 
+    }
+ 
+    // If we come here we have encountered an internal bug...
+ 
+    throw new RuntimeException ("Internal error");
+ 
+  }
+ 
+}
+ 
+// The Ocean sort implementation
+ 
+class oceanSort
+    implements sortInterface {
+ 
+  int[] sortOrder = new int[consts.MAXSPRITES];
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int sortIndex;
+ 
+  // Constructor
+ 
+  public oceanSort () {
+ 
+    // Initial seed sort order
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      sortOrder[i] = i;
+    }
+ 
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Ocean sort";
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+    sortIndex = 0; // Reset indice for first call to getNextSprite()
+ 
+  }
+ 
+  // Add a sprite to the sorting object
+ 
+  public void addSprite (int index, int y) {
+    spriteY[index] = y;
+  }
+ 
+  // Sort sprites...
+ 
+  public void sort () {
+ 
+    int Elem = (consts.MAXSPRITES - 1);
+ 
+    for (int i = 0; i < Elem; i++) {
+ 
+      if (spriteY[sortOrder[i]] > spriteY[sortOrder[i + 1]]) {
+ 
+        int j = i;
+ 
+        while (true) {
+ 
+          int swap = sortOrder[j];
+          sortOrder[j] = sortOrder[j + 1];
+          sortOrder[j + 1] = swap;
+ 
+          if (j == 0) {
+            break;
+          }
+ 
+          j--;
+ 
+          if (spriteY[sortOrder[j]] < spriteY[sortOrder[j + 1]]) {
+            break;
+          }
+ 
+        }
+ 
+      }
+    }
+ 
+  }
+ 
+  public int getNextSprite () {
+    return sortOrder[sortIndex++];
+  }
+
+}
+
+// The Ocean Bucket sort implementation
+// Will try to figure out how much work has to be done before actually
+// doing anything. If the Ocean sort looks to expensive it will simply
+// do a bucket sort instead :)
+ 
+// The Ocean sort implementation
+ 
+class oceanBucketSort
+    implements sortInterface {
+ 
+  bucketSort BucketSorter = new bucketSort ();
+ 
+  int[] sortOrder = new int[consts.MAXSPRITES];
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int sortIndex;
+ 
+  // Constructor
+ 
+  public oceanBucketSort () {
+ 
+    // Initial seed sort order
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      sortOrder[i] = i;
+    }
+ 
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Ocean Bucket sort";
+  }
+
+  // Method that performs a bucket sort if there are too many swaps
+
+  public void RunBucketSort () {
+ 
+    // Ready for action
+ 
+    BucketSorter.sortInit ();
+ 
+    // Load the bucket sort
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      BucketSorter.addSprite (i, spriteY[i]);
+    }
+ 
+    // Sort the lot
+ 
+    BucketSorter.sort ();
+ 
+    // Retrieve info and update internal state
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      sortOrder[i] = BucketSorter.getNextSprite ();
+    }
+ 
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+    sortIndex = 0; // Reset indice for first call to getNextSprite()
+ 
+  }
+ 
+  // Add a sprite to the sorting object
+
+  public void addSprite (int index, int y) {
+    spriteY[index] = y;
+  }
+ 
+  // Sort sprites...
+ 
+  public void sort () {
+ 
+    int totalSwaps = 0;
+    int Elem = (consts.MAXSPRITES - 1);
+ 
+    for (int i = 0; i < Elem; i++) {
+ 
+      if (spriteY[sortOrder[i]] > spriteY[sortOrder[i + 1]]) {
+ 
+        int j = i;
+ 
+        while (true) {
+ 
+          totalSwaps++;
+ 
+          // If we hit the "too much" threshold exit and do a bucket sort!
+          // "Too much" is rated with respect to the progress already made
+ 
+          if (totalSwaps > ( (i / 2) + 10)) {
+            RunBucketSort ();
+            return;
+          }
+ 
+          int swap = sortOrder[j];
+          sortOrder[j] = sortOrder[j + 1];
+          sortOrder[j + 1] = swap;
+ 
+          if (j == 0) {
+            break;
+          }
+ 
+          j--;
+ 
+          if (spriteY[sortOrder[j]] < spriteY[sortOrder[j + 1]]) {
+            break;
+          }
+ 
+        }
+ 
+      }
+    }
+ 
+  }
+ 
+  public int getNextSprite () {
+    return sortOrder[sortIndex++];
+  }
+ 
+}
+ 
+// The Ocean sort implementation
+ 
+class oceanMergeSort
+    implements sortInterface {
+ 
+  int[] sortOrder = new int[consts.MAXSPRITES];
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int sortIndex;
+ 
+  // Constructor
+ 
+  public oceanMergeSort () {
+ 
+    // Initial seed sort order
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      sortOrder[i] = i;
+    }
+ 
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Ocean Merge sort";
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+    sortIndex = 0; // Reset indice for first call to getNextSprite()
+ 
+  }
+ 
+  // Add a sprite to the sorting object
+ 
+  public void addSprite (int index, int y) {
+    spriteY[index] = y;
+  }
+ 
+  //
+ 
+  private void sort (int low, int hi) {
+ 
+    if (low >= hi) {
+      return;
+    }
+ 
+    int mid = (low + hi) / 2;
+ 
+    // Partition the list into two lists and sort them recursively
+ 
+    sort (low, mid);
+    sort (mid + 1, hi);
+ 
+    // Merge the two sorted lists
+ 
+    int end_low = mid;
+    int start_hi = mid + 1;
+ 
+    while ( (low <= end_low) && (start_hi <= hi)) {
+ 
+      if (spriteY[sortOrder[low]] < spriteY[sortOrder[start_hi]]) {
+        low++;
+      }
+      else {
+ 
+        int temp = sortOrder[start_hi];
+ 
+        for (int i = start_hi - 1; i >= low; i--) {
+          sortOrder[i + 1] = sortOrder[i];
+        }
+ 
+        sortOrder[low] = temp;
+ 
+        // Update pointers
+ 
+        low++;
+        end_low++;
+        start_hi++;
+ 
+      }
+ 
+    }
+ 
+  }
+
+  // Sort sprites...
+
+  public void sort () {
+    sort (0, (consts.MAXSPRITES - 1));
+  }
+ 
+  public int getNextSprite () {
+    return sortOrder[sortIndex++];
+  }
+ 
+}
+ 
+// The Ocean Quick sort implementation
+ 
+class oceanFastQuickSort
+    implements sortInterface {
+ 
+  int[] sortOrder = new int[consts.MAXSPRITES];
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int sortIndex;
+ 
+  // Constructor
+ 
+  public oceanFastQuickSort () {
+ 
+    // Initial seed sort order
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      sortOrder[i] = i;
+    }
+ 
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Ocean Fast Quick sort";
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+    sortIndex = 0; // Reset indice for first call to getNextSprite()
+ 
+  }
+ 
+  // Add a sprite to the sorting object
+ 
+  public void addSprite (int index, int y) {
+    spriteY[index] = y;
+  }
+ 
+  //
+ 
+  private void quickSort (int left, int right) {
+    int i, j;
+    int temp, value;
+ 
+    // Only do quicksort on series that are at least 4 elements long
+ 
+    if ( (right - left) > 4) {
+ 
+      i = ( (right + left) / 2);
+ 
+      // Tri-Median method!
+ 
+      if (spriteY[sortOrder[left]] > spriteY[sortOrder[i]]) {
+        // swap
+        temp = sortOrder[left];
+        sortOrder[left] = sortOrder[i];
+        sortOrder[i] = temp;
+      }
+
+      if (spriteY[sortOrder[left]] > spriteY[sortOrder[right]]) {
+        // swap
+        temp = sortOrder[left];
+        sortOrder[left] = sortOrder[right];
+        sortOrder[right] = temp;
+      }
+ 
+      if (spriteY[sortOrder[i]] > spriteY[sortOrder[right]]) {
+        // swap
+        temp = sortOrder[i];
+        sortOrder[i] = sortOrder[right];
+        sortOrder[right] = temp;
+      }
+ 
+      j = (right - 1);
+ 
+      // swap
+      temp = sortOrder[i];
+      sortOrder[i] = sortOrder[j];
+      sortOrder[j] = temp;
+ 
+      i = left;
+      value = spriteY[sortOrder[j]];
+ 
+      while (true) {
+ 
+        // fast forward
+        while (spriteY[sortOrder[++i]] < value) {
+          ;
+        }
+ 
+        // fast reverse
+        while (spriteY[sortOrder[--j]] > value) {
+          ;
+        }
+
+        // stop condition
+        if (j < i) {
+          break;
+        }
+ 
+        // swap
+        temp = sortOrder[i];
+        sortOrder[i] = sortOrder[j];
+        sortOrder[j] = temp;
+ 
+      }
+ 
+      // swap
+      temp = sortOrder[i];
+      sortOrder[i] = sortOrder[right - 1];
+      sortOrder[right - 1] = temp;
+ 
+      quickSort (left, j);
+      quickSort (i + 1, right);
+ 
+    }
+ 
+  }
+ 
+  private void insertionSort (int low, int hi) {
+ 
+    for (int i = low + 1; i <= hi; i++) {
+ 
+      int temp = sortOrder[i];
+      int j = i;
+ 
+      while ( (j > low) && (spriteY[sortOrder[j - 1]] > spriteY[temp])) {
+        sortOrder[j] = sortOrder[j - 1];
+        j--;
+      }
+
+      sortOrder[j] = temp;
+ 
+    }
+  }
+ 
+  // Sort sprites...
+ 
+  public void sort () {
+    quickSort (0, (consts.MAXSPRITES - 1));
+    insertionSort (0, (consts.MAXSPRITES - 1));
+  }
+ 
+  public int getNextSprite () {
+    return sortOrder[sortIndex++];
+  }
+ 
+}
+ 
+// The cluster sort implementation
+ 
+class clusterSort
+    implements sortInterface {
+ 
+  // Marks special items in lists, tables, etc
+  static final int MARKER = 255;
+ 
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int[] Min = new int[consts.MAXSPRITES];
+  int[] Next = new int[consts.MAXSPRITES + 1];
+  int[] Count = new int[consts.MAXSPRITES];
+  int[][] Cluster = new int[consts.MAXSPRITES][4];
+ 
+  int first;
+  int clusterCount;
+ 
+  int sortIndex;
+  int sortItem;
+ 
+  // Constructor
+ 
+  public clusterSort () {
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Cluster sort";
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+  }
+ 
+  // Add a sprite enty
+ 
+  private void add (int index) {
+ 
+    // Now we need to find the proper position in the linked list
+ 
+    if (spriteY[index] < spriteY[Min[first]]) {
+ 
+      Cluster[clusterCount][0] = index;
+      Min[clusterCount] = index;
+      Count[clusterCount] = 1;
+      Next[clusterCount] = first;
+      first = clusterCount++;
+ 
+      return;
+ 
+    }
+ 
+    int i = first;
+ 
+    if (clusterCount > 1) {
+ 
+      while (spriteY[Min[Next[i]]] < spriteY[index]) {
+ 
+        i = Next[i];
+ 
+        if (Next[i] == MARKER) {
+          break;
+        }
+ 
+      }
+ 
+    }
+ 
+    // We have found an in-between value at this point
+    // Now check if the Cluster is full... and if so, split up in two groups
+ 
+    if (Count[i] == 4) {
+ 
+      Cluster[clusterCount][0] = Cluster[i][2];
+      Cluster[clusterCount][1] = Cluster[i][3];
+      Min[clusterCount] = Cluster[clusterCount][0];
+      Count[clusterCount] = 2;
+      Next[clusterCount] = Next[i];
+ 
+      Count[i] = 2;
+      Next[i] = clusterCount;
+ 
+      if (spriteY[index] > spriteY[Min[clusterCount]]) {
+        i = clusterCount;
+      }
+ 
+      clusterCount++;
+ 
+    }
+ 
+    // Add new entry to the Cluster, keeping all items sorted as the Cluster isn't full yet
+ 
+    switch (Count[i]) {
+ 
+      case 1: {
+        Cluster[i][1] = index;
+        break;
+      }
+ 
+      case 2: {
+        if (spriteY[index] < spriteY[Cluster[i][1]]) {
+          Cluster[i][2] = Cluster[i][1];
+          Cluster[i][1] = index;
+        }
+        else {
+          Cluster[i][2] = index;
+        }
+        break;
+      }
+ 
+      case 3: {
+        if (spriteY[index] < spriteY[Cluster[i][1]]) {
+          Cluster[i][3] = Cluster[i][2];
+          Cluster[i][2] = Cluster[i][1];
+          Cluster[i][1] = index;
+        }
+        else if (spriteY[index] < spriteY[Cluster[i][2]]) {
+          Cluster[i][3] = Cluster[i][2];
+          Cluster[i][2] = index;
+        }
+        else {
+          Cluster[i][3] = index;
+        }
+        break;
+      }
+ 
+    }
+ 
+    Count[i]++;
+ 
+  }
+ 
+// Add a sprite to the sorting object
+ 
+  public void addSprite (int index, int y) {
+ 
+    spriteY[index] = y;
+ 
+  }
+ 
+// Sort sprites...
+ 
+  public void sort () {
+ 
+    // set up the first Cluster(s)
+ 
+    Cluster[0][0] = 0;
+    Min[0] = 0;
+    Count[0] = 1;
+    Next[0] = MARKER;
+ 
+    clusterCount = 1;
+    first = 0;
+ 
+    for (int i = 1; i < consts.MAXSPRITES; i++) {
+      add (i);
+    }
+ 
+    sortIndex = first; // Reset indices for first call to getNextSprite()
+    sortItem = 0;
+ 
+  }
+ 
+// Get the next sprite...
+ 
+  public int getNextSprite () {
+ 
+    // This is the next sprite
+ 
+    int index = Cluster[sortIndex][sortItem];
+ 
+    // Update indices for next call to getNextSprite()
+ 
+    if (--Count[sortIndex] > 0) {
+      sortItem++;
+    }
+    else {
+      sortIndex = Next[sortIndex];
+      sortItem = 0;
+    }
+ 
+    return index;
+ 
+  }
+ 
+}
+ 
+// The insertion bucket sort implementation
+ 
+class insertionBucketSort
+    implements sortInterface {
+ 
+  static final int BUCKETS = 64; // Number of available buckets
+ 
+  static final int HASH =
+      (int) Math.ceil ( (double) consts.MAXVALUE / (double) BUCKETS);
+ 
+  int[] spriteY = new int[consts.MAXSPRITES];
+  int[][] Bucket = new int[BUCKETS][consts.MAXSPRITES];
+  int[] Count = new int[BUCKETS];
+ 
+  int sortIndex;
+  int sortItem;
+ 
+  // Constructor
+ 
+  public insertionBucketSort () {
+  }
+ 
+  // Return name
+ 
+  public String name () {
+    return "Insertion Bucket sort";
+  }
+ 
+  // Initialize a new sorting iteration
+ 
+  public void sortInit () {
+ 
+    sortIndex = 0; // Reset indices for first call to getNextSprite()
+    sortItem = 0;
+ 
+  }
+ 
+  // Add a sprite to the sorting object
+ 
+  public void addSprite (int index, int y) {
+ 
+    spriteY[index] = y;
+    int Hash = (y / HASH); // Using integer division here...
+    Bucket[Hash][Count[Hash]++] = index;
+ 
+  }
+ 
+  // Sort sprites...
+ 
+  public void sort () {
+ 
+    // Run a simple insertion sort per bucket
+ 
+    for (int b = 0; b < BUCKETS; b++) {
+ 
+      int Elem = (Count[b] - 1);
+ 
+      for (int i = 0; i < Elem; i++) {
+ 
+        if (spriteY[Bucket[b][i]] > spriteY[Bucket[b][i + 1]]) {
+ 
+          int j = i;
+ 
+          while (true) {
+ 
+            int swap = Bucket[b][j];
+            Bucket[b][j] = Bucket[b][j + 1];
+            Bucket[b][j + 1] = swap;
+ 
+            if (j == 0) {
+              break;
+            }
+ 
+            j--;
+ 
+            if (spriteY[Bucket[b][j]] < spriteY[Bucket[b][j + 1]]) {
+              break;
+            }
+ 
+          }
+ 
+        }
+      }
+ 
+    }
+ 
+  }
+ 
+// Get the next sprite...
+ 
+  public int getNextSprite () {
+ 
+    // fast forward to next filled bucket
+ 
+    while (Count[sortIndex] == 0) {
+      sortIndex++;
+    }
+ 
+    // This is the next sprite
+ 
+    int index = Bucket[sortIndex][sortItem];
+ 
+    // Update indices for next call to getNextSprite()
+ 
+    if (--Count[sortIndex] > 0) {
+      sortItem++;
+    }
+    else {
+      sortIndex++;
+      sortItem = 0;
+    }
+ 
+    return index;
+
+  }
+
+}
+
+// Internal representation of a sprite
+
+class spriteObject {
+
+  int y;
+  int gamePatternIndex; // This attribute is only used for the game pattern test...
+
+  public spriteObject () {
+  }
+
+}
+
+// Class that manages sprites
+
+class spriteManager {
+
+  spriteObject[] Sprite = new spriteObject[consts.MAXSPRITES];
+
+  int[] gamePatternY = {
+                       0, 0, 0, 0, 1, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13, 15,
+                       17, 19, 22, 24, 26, 29, 31, 34, 37, 40, 43, 46, 49, 52,
+                       55, 59, 62, 66, 69, 73, 76, 80, 84, 88, 91, 95, 99,
+                       103, 107, 111, 115, 119, 123, 127, 131, 135, 139, 143,
+                       147, 151, 155, 159, 163, 166, 170, 174, 178, 181, 185,
+                       188, 192, 195, 199, 202, 205, 208, 211, 214, 217, 220,
+                       223, 225, 228, 230, 232, 235, 237, 239, 241, 242, 244,
+                       246, 247, 248, 249, 250, 251, 252, 253, 253, 254, 254,
+                       254, 254, 254, 254, 253, 253, 252, 251, 250, 249, 248,
+                       247, 246, 244, 242, 241, 239, 237, 235, 232, 230, 228,
+                       225, 223, 220, 217, 214, 211, 208, 205, 202, 199, 195,
+                       192, 188, 185, 181, 178, 174, 170, 166, 163, 159, 155,
+                       151, 147, 143, 139, 135, 131, 127, 123, 119, 115, 111,
+                       107, 103, 99, 95, 91, 88, 84, 80, 76, 73, 69, 66, 62,
+                       59,
+                       55, 52, 49, 46, 43, 40, 37, 34, 31, 29, 26, 24, 22, 19,
+                       17, 15, 13, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1, 1,
+                       0, 0, 0, 0};
+
+  public spriteManager () {
+
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      Sprite[i] = new spriteObject ();
+    }
+ 
+  }
+ 
+  public void setRandomY () {
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      Sprite[i].y = (int) (Math.random () * consts.MAXVALUE);
+    }
+ 
+  }
+ 
+  public void setIncreasingY () {
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      Sprite[i].y = (i *
+                    (int) Math.ceil ( (double) consts.MAXVALUE /
+                    (double) consts.MAXSPRITES));
+    }
+ 
+  }
+ 
+  public void setDecreasingY () {
+ 
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      Sprite[i].y = (consts.MAXVALUE -
+                    (i *
+                    (int) Math.ceil ( (double) consts.MAXVALUE /
+                    (double) consts.MAXSPRITES)));
+    }
+
+  }
+
+  public void initGamePatternY () {
+
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      Sprite[i].gamePatternIndex = (int) (Math.random () *
+                                   gamePatternY.length);
+    }
+
+  }
+
+  public void setGamePatternY () {
+
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+
+      Sprite[i].y = (gamePatternY[Sprite[i].gamePatternIndex] *
+                    (consts.MAXVALUE / 254));
+
+      Sprite[i].gamePatternIndex = ( (Sprite[i].gamePatternIndex + 1) %
+                                   gamePatternY.length);
+
+    }
+
+  }
+
+}
+
+// Class that runs sorting tests for given a specific sorting object
+
+public class spriteSortTest {
+
+  // Indicates number of test runs
+  static final int MAXTESTITERATIONS = 100000;
+
+  spriteManager sManager = new spriteManager ();
+  sortInterface sort;
+
+  // constructor
+
+  public spriteSortTest (sortInterface sort) {
+    this.sort = sort;
+  }
+
+  // move sprites to the given sorting object
+
+  public void insertSpritesInSort () {
+
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      sort.addSprite (i, sManager.Sprite[i].y);
+    }
+
+  }
+
+  // drain sprites from the given sorting object
+
+  public void drainSpritesFromSort () {
+
+    for (int i = 0; i < consts.MAXSPRITES; i++) {
+      int sprite = sort.getNextSprite ();
+    }
+
+  }
+
+  // basic test to see if the given sorting object works OK
+
+  public void functionalTest () {
+
+    // Do test runs to determine if the sorting object runs correctly
+
+    for (int t = 0; t < 1000; t++) {
+
+      sManager.setRandomY ();
+      sort.sortInit ();
+      insertSpritesInSort ();
+      sort.sort ();
+
+      ArrayList originalList = new ArrayList ();
+      ArrayList sortedList = new ArrayList ();
+
+      for (int i = 0; i < consts.MAXSPRITES; i++) {
+        originalList.add (new Integer (sManager.Sprite[i].y));
+      }
+
+      int minY = 0;
+      int curY;
+
+      for (int i = 0; i < consts.MAXSPRITES; i++) {
+
+        curY = sManager.Sprite[sort.getNextSprite ()].y;
+        sortedList.add (new Integer (curY));
+
+        if (curY >= minY) {
+          minY = curY;
+        }
+        else {
+          throw new RuntimeException ("Sort order malfunction");
+        }
+
+      }
+
+      if (!sortedList.containsAll (originalList)) {
+        throw new RuntimeException ("Sort did not return all added elements");
+      }
+
+    }
+
+  }
+
+  // speed test for a given sort object using completely random sprite Y values
+
+  public void randomYSort () {
+
+    for (int t = 0; t < MAXTESTITERATIONS; t++) {
+      sManager.setRandomY ();
+      sort.sortInit ();
+      insertSpritesInSort ();
+      sort.sort ();
+      drainSpritesFromSort ();
+    }
+
+  }
+
+  // speed test for a given sort object using extremes of Sprite Y values
+
+  public void extremesOfYSort () {
+
+    for (int t = 0; t < (MAXTESTITERATIONS / 2); t++) {
+
+      // Prevent 'memory' advantages by alternating between
+      // increasing and decreasing sprite Y values...
+
+      sManager.setIncreasingY ();
+      sort.sortInit ();
+      insertSpritesInSort ();
+      sort.sort ();
+      drainSpritesFromSort ();
+
+      sManager.setDecreasingY ();
+      sort.sortInit ();
+      insertSpritesInSort ();
+      sort.sort ();
+      drainSpritesFromSort ();
+
+    }
+
+  }
+
+  // speed test for a given sort object using typical 'game pattern' Y values
+
+  public void gamePatternYSort () {
+
+    final int MAXREINIT = 1000;
+
+    for (int i = 0; i < MAXREINIT; i++) {
+
+      sManager.initGamePatternY ();
+
+      for (int t = 0; t < (MAXTESTITERATIONS / MAXREINIT); t++) {
+        sManager.setGamePatternY ();
+        sort.sortInit ();
+        insertSpritesInSort ();
+        sort.sort ();
+        drainSpritesFromSort ();
+      }
+
+    }
+
+  }
+
+  // run all the tests for a given sort object
+
+  public void run () {
+
+    System.out.println ("Sorting " + consts.MAXSPRITES + " sprites in " +
+        MAXTESTITERATIONS + " test runs for the << " + sort.name () +
+        " >> sorting method");
+
+    System.out.println ("Running the functional test");
+    functionalTest ();
+    System.out.println ("Functional test completed succesfully");
+
+    System.out.println ("Completely random Y");
+    long start = System.currentTimeMillis ();
+    randomYSort ();
+    long stop = System.currentTimeMillis ();
+    System.out.println ("Elapsed: " + (stop - start));
+
+    System.out.println ("Extremes of Y");
+    start = System.currentTimeMillis ();
+    extremesOfYSort ();
+    stop = System.currentTimeMillis ();
+    System.out.println ("Elapsed: " + (stop - start));
+
+    System.out.println ("Gaming pattern Y");
+    start = System.currentTimeMillis ();
+    gamePatternYSort ();
+    stop = System.currentTimeMillis ();
+    System.out.println ("Elapsed: " + (stop - start));
+
+  }
+
+  // main entry point
+
+  public static void main (String[] args) throws Exception {
+
+    spriteSortTest test1 = new spriteSortTest (new bucketSort ());
+    test1.run();
+
+    spriteSortTest test2 = new spriteSortTest (new oceanSort ());
+    test2.run();
+
+    spriteSortTest test3 = new spriteSortTest (new oceanBucketSort ());
+    test3.run();
+
+    spriteSortTest test4 = new spriteSortTest (new oceanMergeSort ());
+    test4.run();
+
+    spriteSortTest test5 = new spriteSortTest (new oceanFastQuickSort ());
+    test5.run();
+
+    spriteSortTest test6 = new spriteSortTest (new clusterSort ());
+    test6.run ();
+
+    spriteSortTest test7 = new spriteSortTest (new insertionBucketSort ());
+    test7.run ();
+
+  }
+
+}
+
+
+
+

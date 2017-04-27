@@ -1,0 +1,852 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Sprite multiplexing by Cadaver
+------------------------------
+
+This is about displaying more than 8 sprites on the screen (re-using, and thus
+"multiplexing" the sprites)
+
+
+0. Background
+
+Sprite multiplexing in its full extent (as seen in games like Green Beret or
+Ghosts'n Goblins, which allow free usage of over 8 sprites anywhere on the
+screen, any colors and frames) is a subject seldom discussed in magazines and
+such. Often they just discuss re-using the sprites or the "zone split"
+technique.
+
+When I started C64 development again, with crossdevelopment, I decided that if
+I was going to do a game, it would definitely have to display more than 8
+sprites. I tried to search the net for information but basically came up with
+nothing, except some programmer diaries, for example Andrew Braybrook's
+Morpheus diary, which was referring to some of the issues involved quite
+cryptically.
+
+What I had to do was to start reverse-engineering the sprite sorting/
+multiplexing routines of games like Green Beret, Midnight Resistance etc.
+to understand deeper what was going on. My first sortroutine was of course
+the bubblesort but that was slow...
+
+
+1. "Zone split" technique
+
+Let's begin with this to introduce the hardware features involved within a
+simpler approach. Consider the following situation in Turrican where the player
+is battling against the first boss enemy, the giant "fist": There's the player
+character composed of 3 sprites (2 multicolors sprites and a singlecolor white
+sprite Y-expanded on top of that) and the "fist", composed of 5 sprites per
+row and 4 rows (20 sprites total) Here's a diagram of the sprite numbers in
+use on the screen, with the 3rd (the Y-expanded sprite) omitted.
+
+                  4 5 6 7 8
+                  4 5 6 7 8
+                  4 5 6 7 8
+             1    4 5 6 7 8
+             2
+    ______________________________
+
+So, the idea seems to be as follows: a raster interrupt happens before the
+start of each sprite row for the boss enemy, and in it the Y-coordinates,
+sprite frames, and colors for sprites 4-8 are rewritten, to re-use the sprites.
+X-coordinates do not change between rows so they can be set beforehand.
+
+The most important hardware feature to take into account: The Y-coordinate for
+a sprite must have been set before the raster line reaches that Y-position, or
+the re-used sprite won't display at all!
+
+This is not as bad as it sounds. The Y-coordinate can actually be set well
+beforehand, right after the previous sprite row has started displaying
+(modifying the Y-coord in the middle of a sprite display won't "cut" it or
+anything)
+
+In fact, more trouble will come from the frames and colors. It will take
+at least one rasterline to rewrite the frame & color registers, so it's likely
+that the last pixel line of the "previous" sprite row will already be
+displaying the "new" sprite row's last pixel line graphics and colors, at least
+for some sprites (we're too early) or the first pixel line of the "new" sprite
+row still has the "previous" sprite row's graphics data & colors (we're too
+late). So it's a matter of very careful timing adjustments, and possibly
+designing the sprites so that it doesn't matter if frame & color register
+writes are late (using only multicolors, not the sprite color, in the first
+pixel line of sprites)
+
+An example code for handling the rewriting in above situation could look
+something like this:
+
+        lda $d007        ;Take the Y-coord of the 4th sprite,
+        clc            ;advance it 21 pixels lower and
+        adc #21            ;write to Y-coords of sprites 4-8.
+        sta $d007        ;This must happen before the raster
+        sta $d009        ;line reaches the new Y-coordinate,
+        sta $d00b        ;or sprites won't be displayed.
+        sta $d00d
+        sta $d00f
+        ldx spriteindex
+        lda frametable,x    ;Here, X has been loaded with an index
+        sta $c3fb        ;into the boss enemy's sprite frame &
+        lda frametable+1,x    ;color tables. Screen memory is at
+        sta $c3fc               ;$c000
+        lda frametable+2,x
+        sta $c3fd
+        lda frametable+3,x
+        sta $c3fe
+        lda frametable+4,x
+        sta $c3ff
+        lda colortable,x
+        sta $d02a
+        lda colortable+1,x
+        sta $d02b
+        lda colortable+2,x
+        sta $d02c
+        lda colortable+3,x
+        sta $d02d
+        lda colortable+4,x
+        sta $d02e
+        txa            ;Increase the sprite index with 5
+        clc            ;for the next sprite row.
+        adc #5
+        sta spriteindex
+
+In fact, I've never written a this kind of multiplexer and probably never will.
+Of course it allows impressively big enemy sprites but the freedom to do
+whatever I want with the sprites is lost, and therefore I introduce next...
+
+
+2. True (general) sprite multiplexing
+
+This methods allows to freely use sprites as if there were more than 8
+available (Green Beret, Ghosts'n Goblins, Midnight Resistance, Turricans when
+*not* in a bossfight and many more.) Of course, the hardware limits come into 
+play: it is simply impossible to display more than 8 sprites on the same raster 
+line, and because rewriting the sprite registers takes some time, ugly graphical 
+effects can be displayed if sprites are packed tight and registers are actually 
+being rewritten while the sprites are being displayed.
+
+The key to general multiplexing is to have the sprites in a list sorted from
+top to bottom (using the Y-coordinate), so that the raster interrupts to handle
+sprite re-use will always run from top to bottom in a controlled fashion.
+
+It is a bit more complicated than the zone-split multiplexing, but the
+complexity will be hidden within the sprite sorting routine and the raster
+interrupts that actually display the sprites: to the rest of the program it will
+be as easy to access the sprites as if they were hardware sprites (or in fact
+easier, because the sprite sorting routine can also take care of bit
+manipulation like the X-coord most significant bits or sprite enabled bits)
+
+So, what needs to be done is to:
+
+- Sort the sprites by increasing Y-coordinate, this means the sprites at the
+  top of the screen will come first in the sorted order. (done in the sprite
+  sorting routine)
+
+- Map the "virtual" sprites onto the C64's 8 physical sprites (done in the
+  sprite sorting routine or in the raster interrupts)
+
+- Write the correct values to the sprite hardware registers so that the
+  "virtual" sprites can be displayed as correctly as possible (done in the
+  raster interrupts)
+
+- When done displaying the sprites, reset their positions to the lowest
+  possible position (255). This is to ensure that any sprites aren't
+  displayed too early on the next frame, if the sprites are moving downwards.
+  If writing the first 8 sprites well before the sprite displaying begins,
+  this can be left out!
+
+Optionally, we can:
+
+- Reject sprites that are outside visible X- or Y-coordinate range (this could
+  also be responsibility of the main program)
+
+- Reject sprites if there is more than 8 on a row (done in the sprite sorting
+  routine or in the raster interrupts.) If this isn't done, some definitely
+  ugly graphics will appear when more than 8 sprites try to coexist on a single
+  rasterline.
+
+- Figure out beforehand all the raster interrupts' positions and sprite numbers
+  that will be (re)written in them.
+
+- Precalculate values of the $d010 register to execute the raster interrupts
+  quicker.
+
+- Implement doublebuffering for the "sorted sprite table" used by raster
+  interrupts. This allows to sort the sprites for the next frame to display
+  while the previous sprites are still being displayed.
+
+
+2.1 Sorting the sprites
+
+Please note: the sort algorithm of chapter 2.1.5 ("Ocean" algorithm) seems to 
+be superior to all the others in this rant. I use it in MW4 and have been very
+satisfied. Please consider using it for your actual C64 projects and think of
+other algorithms being presented here only for educational purposes.
+
+I'll be mainly giving pseudocode (C-like) examples here. Yes, in some way this
+is "cheating" in a C64 programming rant but I'm sure it gives a better
+understanding of the algorithms than trying to follow an already optimized &
+cryptic ASM implementation (and you get to see a lot of that in those game
+source codes, links are at the end of this rant)
+
+So, what we start with is probably a random order of Y-coordinates in the
+"virtual sprite" Y-coordinate array (whatever the main program is coming up
+with). What we want as an end result is a nicely Y-sorted list of sprites to 
+work with.
+
+Now it's also time to explain the array names used in these examples (they're
+actually the same I use in my C64 source code.)
+
+The "virtual" sprite arrays (unsorted):
+sprx - Unsorted X coordinates
+spry - Unsorted Y coordinates
+sprc - Unsorted colors
+sprf - Unsorted sprite frame numbers
+
+The sorted sprite arrays:
+sortsprx  - Sorted X coordinates
+sortspry  - Sorted Y coordinates
+sortsprc  - Sorted colors
+sortsprf  - Sorted sprite frame numbers
+sortorder - Sorted list of indexes to unsorted table (not used in every example)
+            Needs to be on the zeropage to allow certain indexing operations
+            
+
+2.1.1 The bubblesort
+
+This involves swapping the Y-coordinates until the order is right. It's fast
+when there's only a small amount of sprites but when the amount grows, the time
+taken grows proportional to the power of two (N^2) of the number of sprites N.
+
+Of course, it's not enough to swap the Y-coordinates. We must know what sprite
+they're associated with, or they're worthless. Therefore we must have an index
+array (indexes to the unsorted array) - an index entry travels with the
+Y-coordinate during sorting.
+
+So we'd do like this
+
+;Initialize arrays for sorting
+
+for (sprite=0; sprite &lt; maximum_sprites; sprite++)
+{
+  sortspry[sprite] = spry[sprite];
+  sortorder[sprite] = sprite;
+}
+
+;Do the actual sorting
+
+for (outer = 0; outer &lt; maximum_sprites-1; outer++)
+{
+  for (inner = outer+1; inner &lt; maximum_sprites; inner++)
+  {
+    if (sortspry[inner] &lt; sortspry[outer])
+    {
+      swap(sortspry[inner], sortspry[outer]);
+      swap(sortorder[inner], sortorder[outer]);
+    }
+  }
+}
+
+Another downside of this algorithm is that there is no clear point where to
+insert more-than-8-sprites-on-a-row rejection; removing a sprite from the
+sorted array would involve actually moving memory blocks around (slow).
+
+It could also be implemented so that there was no sorted Y coords table at this
+point; instead accesses to the unsorted table would happen via the index table
+at all times. This would remove the swapping of the Y-coords but make the
+Y-coord compares slower.
+
+
+2.1.2 Finding the next lowest Y-coordinate
+
+This doesn't involve swapping and does have a clear point where sprite
+rejection can be inserted. It also lends itself well to completely unrolling
+the inner compare loop for speed purposes. However, the execution time still
+grows proportional to N^2.
+
+Here a "temporary" Y-coord array might need to be used, because values from
+that table are actually being "destroyed". If all sprite coords are calculated
+again for each next frame it doesn't matter. Anyway, I'm showing it with the
+temp array involved. (it can be on the zeropage for speed)
+
+;Initialize temp array
+
+for (sprite = 0; sprite &lt; maximum_sprites; sprite++)
+{
+  temp_y[sprite] = spry[sprite];
+}
+
+;Do the sorting
+
+sorted_sprites = 0;       ;Counter of sprites that passed the sorting
+
+while (true)          ;Indefinite loop
+{
+  lowest_found_y = 255;      ;Maximum Y-coord value found so far
+  lowest_spritenumber = 255; ;This is an illegal value used to
+                             ;terminate the loop when no more
+                     ;sprites are found
+
+  for (sprite = 0; sprite &lt; maximum_sprites; sprite++)
+  {
+    if (temp_y[sprite] &lt; lowest_found_y)
+    {
+      lowest_found_y = temp_y[sprite];
+      lowest_spritenumber = sprite;
+    }
+  }
+
+  if (lowest_spritenumber > maximum_sprites) break; ;Sorting finished,
+                            ;break out of the loop
+  temp_y[lowest_spritenumber] = 255; ;Now make this sprite unavailable for the
+                                    ;next round of sorting
+
+  if (sprite_not_rejected)          ;Here we can do sprite rejection if wanted
+  {
+    ;Next we can either copy the sprite variables to the sorted table,
+    ;or just use an index
+
+    ;Copying to sorted table
+    sortspry[sorted_sprites] = spry[lowest_spritenumber];
+    sortsprx[sorted_sprites] = sprx[lowest_spritenumber];
+    sortsprf[sorted_sprites] = sprf[lowest_spritenumber];
+    sortsprc[sorted_sprites] = sprc[lowest_spritenumber];
+    sorted_sprites++;
+
+    ;Using an index
+    sortorder[sorted_sprites] = lowest_spritenumber;
+    sorted_sprites++;
+  }
+}
+
+
+2.1.3 Sorting according to Y divided by 8 (incorrect)
+
+This sort method doesn't guarantee correct order of sprites but is fast
+(execution time proportional to N.) It's what I used in MW1-3, but won't be
+using any longer - it's like taking only the latter step of a radix-sort.
+
+This is based on the idea of "buckets" where sprites are stored. Handling those
+buckets with C64 ASM involves some creativity, but you can look at the sources
+to see how I did it. Basically, my solution is to not use any two-dimensional
+arrays, but finding out the amount of sprites in each bucket before actually
+starting to put sprites into buckets; therefore each bucket's contents can be
+next to each other in memory and the sorted sprite order emerges then directly
+from the bucket memory area, without having to actually walk through each
+separate bucket like is done in this example.
+
+If this sounds complicated, don't worry, this isn't a good solution. We'll come
+to the best solution (in my opinion) last...
+
+;Reset the amount of sprites in each bucket to 0. There has to be as many
+;buckets as there are character rows in the visible sprite range.
+
+for (bucket = 0; bucket &lt; maximum_buckets; bucket++)
+{
+  amount_in_bucket[bucket] = 0;
+}
+
+;Store sprites to buckets, according to their Y coordinates. The
+;buckets are actually a two-dimensional array.
+
+for (sprite = 0; sprite &lt;  maximum_sprites; sprite++)
+{
+  bucket_number = spry[sprite] / 8;
+  bucket[bucket_number][amount_in_bucket[bucket_number]] = sprite;
+  amount_in_bucket[bucket_number]++;
+}
+
+;Walk through all buckets to get the sprite order. In this example,
+;the sprites are directly copied to the sorted table.
+
+sorted_sprites = 0;
+
+for (bucket = 0; bucket &lt; maximum_buckets; bucket++)
+{
+  for (index = 0; index &lt; amount_in_bucket[bucket]; index++)
+  {
+    sprite = bucket[bucket][index];
+    sortspry[sorted_sprites] = spry[sprite];
+    sortsprx[sorted_sprites] = sprx[sprite];
+    sortsprf[sorted_sprites] = sprf[sprite];
+    sortsprc[sorted_sprites] = sprc[sprite];
+    sorted_sprites++;
+  }
+}
+
+
+2.1.4 Radix sorting
+
+This ensures correct sprite order, but is complicated. Execution time, like in
+previous example, is only proportional to N but the code itself can be
+relatively slow. It follows the "bucket" idea but in two passes. First a
+sorting is done according to the remainder of Y coordinate divided by 16, then
+according to the actual result of the division.
+
+; Clear buckets for both passes.
+
+for (bucket = 0; bucket &lt; maximum_buckets; bucket++)
+{
+  amount_in_bucket1[bucket] = 0;
+  amount_in_bucket2[bucket] = 0;
+}
+
+;Store sprites to the first pass buckets, according to remainder of
+;Y divided by 16.
+
+for (sprite = 0; sprite &lt; maximum_buckets; sprite++)
+{
+  bucket1_number = spry[sprite] & 15;
+  bucket1[bucket1_number][amount_in_bucket1[bucket1_number]] = sprite;
+  amount_in_bucket1[bucket1_number]++;
+}
+
+;Walk through all the first pass buckets to get the first pass sorting order.
+;At the same time, put sprites to the second pass buckets according to Y
+;divided by 16.
+
+for (bucket = 0; bucket &lt; maximum_buckets; bucket++)
+{
+  for (index = 0; index &lt; amount_in_bucket1[bucket]; index++)
+  {
+    sprite = bucket[bucket][index];
+    bucket2_number = spry[sprite] / 16;
+    bucket2[bucket2_number][amount_in_bucket2[bucket2_number]] = sprite;
+    amount_in_bucket2[bucket2_number]++;
+  }
+}
+
+;Walk through the second pass buckets to get the final sprite order.
+;In this example, the sprites are directly copied to the sorted table.
+
+sorted_sprites = 0
+
+for (bucket = 0; bucket &lt; maximum_buckets; bucket++)
+{
+  for (index = 0; index &lt; amount_in_bucket2[bucket]; index++)
+  {
+    sprite = bucket2[bucket][index];
+    sortspry[sorted_sprites] = spry[sprite];
+    sortsprx[sorted_sprites] = sprx[sprite];
+    sortsprf[sorted_sprites] = sprf[sprite];
+    sortsprc[sorted_sprites] = sprc[sprite];
+    sorted_sprites++;
+  }
+}
+
+As you can see, this is complicated and involves quite a lot of memory,
+as well as at least three loops to get everything done.
+
+
+2.1.5 Continuous insertion sorting
+
+This can be found in many Ocean/Imagine games, like Green Beret or Midnight
+Resistance. Similar algorithms are also found in Dragon Breed and SWIV.
+
+This sort routine is different from all previously mentioned. It uses an order-
+array that is not resetted each time, therefore each sorting operation is a
+continuation of the previous and if not much changes have happened (sprites not
+moving past each other in Y-direction much) it will be very fast as it doesn't
+have to do almost anything. However, there's the possibility that on some frame
+it'll eat a lot of time, when there's a lot of changes in the sprite order.
+
+First, performed only once in the beginning of the program, we need to set an
+initial state for the sort order array. One choice is all the sprite numbers
+going from 0 to maximum:
+
+for (sprite = 0; sprite &lt; maximum_sprites; sprite++)
+{
+  sortorder[sprite] = sprite;
+}
+
+Then the sorting routine. Note one curious thing: What if the amount of sprites
+onscreen changes, how can the sortroutine deal with it? Obviously, it can't,
+directly. Therefore we must use for example the maximum Y-coordinate value 255
+to mark unused sprites; these will fall to the bottom of the sorted list when
+sorted and cause no trouble (the actual sprite display code can then easily
+notice the first unused sprite and exit)
+
+sprite1 = 0;
+
+while (true)
+{
+  if (spry[sortorder[sprite1+1]] &lt; spry[sortorder[sprite1]])
+  {
+    sprite2 = sprite1;
+
+    while (true)
+    {
+      swap(sortorder[sprite2], sortorder[sprite2+1]);
+      if (sprite2 == 0) break;
+      sprite2--;
+      if (spry[sortorder[sprite2+1]] &gt;= spry[sortorder[sprite2]]) break;
+    }
+  }
+  sprite1++;
+  if (sprite1 == maximum_sprites - 1) break;
+}
+
+Here's the ASM implementation as found in Ocean games:
+
+                ldx #$00
+sortloop:       ldy sortorder+1,x
+                lda spry,y
+                ldy sortorder,x
+                cmp spry,y
+                bcs sortskip
+                stx sortreload+1
+sortswap:       lda sortorder+1,x
+                sta sortorder,x
+                sty sortorder+1,x
+                cpx #$00
+                beq sortreload
+                dex
+                ldy sortorder+1,x
+                lda spry,y
+                ldy sortorder,x
+                cmp spry,y
+                bcc sortswap
+sortreload:     ldx #$00
+sortskip:       inx
+                cpx #MAXSPR-1
+                bcc sortloop
+
+And here's a variant adapted from SWIV (SWIV sorts the sprites bottom-to-top,
+so the order has been reversed here). This needs a few zeropage temp variables,
+and uses a running compare-value stored in the accumulator for slightly better
+performance.
+
+                ldx #$00
+                txa
+sortloop:       ldy sortorder,x
+                cmp spry,y
+                beq noswap2
+                bcc noswap1
+                stx temp1
+                sty temp2
+                lda spry,y
+                ldy sortorder-1,x
+                sty sortorder,x
+                dex
+                beq swapdone
+swaploop:       ldy sortorder-1,x
+                sty sortorder,x
+                cmp spry,y
+                bcs swapdone
+                dex
+                bne swaploop
+swapdone:       ldy temp2
+                sty sortorder,x
+                ldx temp1
+                ldy sortorder,x
+noswap1:        lda spry,y
+noswap2:        inx
+                cpx #MAX_SPR
+                bne sortloop
+
+This sorting loop produces a sorted index array of the sprites, which can be
+walked through and sprites be copied to the sortsprx, sortspry etc. arrays and 
+rejected if necessary. I believe this is the overall best algorithm (for game 
+use, at least) I've got to know so far.
+
+
+2.2 Mapping the "virtual" sprites to physical sprites
+
+There really isn't much of a choice, the idea is to go round and round with the
+physical sprites until all "virtual" sprites have been displayed. So, the
+1st-8th virtual sprites (in sorted order) will go to physical sprites 1-8, then
+virtual sprite 9 will again be mapped onto physical sprite 1, virtual sprite 10
+to physical sprite 2 and so on.
+
+Based on the priority you want for the sprites you can also reverse the
+physical sprite order, so 1st virtual goes to 8th physical, 2nd virtual to 7th
+physical etc.
+
+This is an example of sprite mapping, something that could be happening in
+Green Beret (first level.) There's the 2-sprite soldiers running around, the
+player jumping in the air and a flamethrower left hanging in the air (1 sprite)
+
+                          1
+                4         2       3
+              __5_____         ________
+             /       6\       /     7
+       _____/________8_\_____/______1__
+      /           2            3
+     /____________4____________5_______
+
+BOFH:Servers Under Siege has a priority-based sprite mapping instead. This
+is more complicated: if the sprite's priority class is LOW (bodies,
+items) the sprite mapping loop tries to find a "free" physical sprite in this
+order: 8,7,6,5,4,3,2,1. For MEDIUM priority (player, enemies) the order is
+5,4,6,3,7,2,8,1 and for HIGH priority (fire, explosions) the order is
+1,2,3,4,5,6,7,8. "Free" physical sprite means in this case one whose previous
+virtual sprite is sufficiently far away from the new virtual sprite, in Y-
+direction (practically, at least 21 pixels)
+
+
+2.3 Rejecting sprites that try to be the 9th sprite on a row.
+
+This is quite easy. Let's assume we're walking through the order array of
+sprites, like the one produced by the algorithm presented just above. The
+virtual sprites are to be mapped to physical sprites by the round-and-round
+method, next_sprite is the next sprite-index in sorted order, and there's a
+variable sorted_sprites (like before) that indicates how many sprites have
+been "accepted" so far. The accepted sprites so far have been copied to the 
+sorted arrays (sortsprx, sortspry etc.)
+
+The test is:
+if (spry[next_sprite] - sortspry[sorted_sprites - 8] &lt; 21) then reject();
+
+You'll see that this test cannot be done for the first 8 sprites because the
+sorted array index would turn negative. That is logical, the test is
+unnecessary for the first 8 sprites and they can always be accepted. But the
+idea for further sprites is to compare the Y-coordinate of the previous
+"virtual" sprite mapped to that physical sprite; if the difference is less
+than 21 pixels then the sprite would be too close and couldn't be displayed by
+the hardware.
+
+
+2.4 Determining what physical sprites to write, and when.
+
+This can be done either "on the fly" in the raster interrupt or be 
+precalculated. There are two basic methods, see which one fits you better.
+
+2.4.1 Just before the new sprite
+
+The idea is to wait until we are close enough to the starting Y-coordinate of a 
+sprite, and then write the sprite registers. If the following sprite is close 
+to it, it can also be written in the same raster interrupt.
+
+What is "close enough"? In fact, it is the amount of rastertime taken to write
+all 8 sprites under a worst-case condition. If we come closer to a sprite's
+Y-coordinate before writing the registers, there could be the possibility that
+we don't have time to write all 8 sprites, if all of them would happen to be
+at the same Y-coordinate. But the closer we can come, the neater tight-packed
+sprite formations will look like (less graphical errors.)
+
+If the raster interrupts (when they happen, from what sprite to start, how many
+sprites to write) are precalculated, there are two benefits:
+
+- The "close enough"-factor (adjustment to raster interrupt position) can be
+  decided based on the number of sprites that will be written in the next
+  raster interrupt. For example, if there's only one sprite, the interrupt
+  can happen just for example 2 lines before its Y-coordinate, but if there's
+  all sprites, the interrupt must happen about 10-12 lines before.
+
+- Y-coordinates are critical, they must be ready when the sprites start to
+  display, everything else is cosmetic. So we can write the Y-coordinates first
+  in the raster interrupt, because we know what sprites to write, and only
+  after that the rest (X-coords, frame, color)
+
+2.4.2 Just after the old sprite
+
+For this method, the first 8 sprites have to be written at the top of the
+frame. Then, we wait for the rasterline just below the first sprite, and write
+the new sprite register values to re-use it. Repeat for the second sprite and
+on until the last virtual sprite's register values have been written.
+
+If we write the Y-coordinate last, we will actually ensure that no glitches
+are possible: in the case the new sprite is too close to the old or writes are
+otherwise delayed, the new sprite simply won't be displayed at all!
+
+This method is simpler & cleaner, but in games where close sprite packing is
+inevitable (like Green Beret), missing sprites to avoid glitches might not be
+acceptable.
+
+
+2.5 Doublebuffering
+
+This too isn't too complicated. Reserve twice as much space for the sorted
+sprite arrays (for example, if you use 24 sprites, reserve space for 48). When
+the raster interrupts are displaying sprites 0-23, you can modify sprites 24-47
+and vice versa. This makes the code a bit more complicated but it isn't a
+great pain overall.
+
+To keep the main program simple, the unsorted sprite arrays shouldn't be
+doublebuffered.
+
+
+2.6 The raster interrupt code
+
+The aim is simple: to write the needed sprite register values as fast as
+possible. Many commercial games are quite inefficient in this, consider the
+following, which tries to be quite much like the typical code in Ocean
+games: (here, we assume Y contains the "virtual" spritenumber)
+
+                tya
+                and #$07                    ;Get physical spritenum
+                tax                         ;to X
+                lda sortsprc,y
+                sta $d027,x
+                lda sortsprf,y
+                sta $c3f8,x                 ;Write frame to both screens of the
+                sta $c7f8,x                 ;doublebuffered screen (unnecessary!)
+                txa
+                asl
+                tax
+                lda sortspry,y
+                sta $d001,x
+                lda sortsprx,y              ;Multiply sprite X-coord by 2; does
+                asl                         ;not allow 1-pixel accuracy
+                sta $d000,x
+                bcc msb_low
+msb_high:       lda $d010
+                ora ortbl,x
+                sta $d010
+                jmp nextsprite
+msb_low:        lda $d010
+                and andtbl,x
+                sta $d010
+nextsprite:     iny
+                ...
+
+ortbl:          dc.b 1
+andtbl:         dc.b 255-1
+                dc.b 2
+                dc.b 255-2
+                dc.b 4
+                dc.b 255-4
+                dc.b 8
+                dc.b 255-8
+                dc.b 16
+                dc.b 255-16
+                dc.b 32
+                dc.b 255-32
+                dc.b 64
+                dc.b 255-64
+                dc.b 128
+                dc.b 255-128
+
+What can be done to optimize this process?
+
+- Write a separate piece of code for each physical sprite
+- Precalculate $d010 values (of course, time doing this is lost elsewhere, but
+  faster raster interrupt code gives less significant graphical errors with
+  tight sprite formations)
+- Write frame to only one screen at a time; the raster interrupt code can be
+  modified according to the screen currently in use
+
+Now consider this second example (again, virtual spritenumber is in Y)
+
+sprite0:        lda sortspry,y
+                sta $d001
+                lda sortsprx,y
+                sta $d000
+                lda sortsprd010,y
+                sta $d010
+                lda sortsprf,y
+frame0:         sta $c3f8
+                lda sortsprc,y
+                sta $d027
+                iny
+                cpy endspr
+                bcs done
+
+sprite1:        lda sortspry,y
+                sta $d003
+                lda sortsprx,y
+                sta $d002
+                lda sortsprd00,y
+                sta $d010
+                lda sortsprf,y
+frame1:         sta $c3f9
+                lda sortsprc,y
+                sta $d028
+                iny
+                cpy endspr
+                bcs done
+                ...
+
+Looks a bit faster, doesn't it? We would modify the highbyte of the frame-
+write STA instructions according to what side of the doublebuffered screen is
+in use. Of course we also have to jump to the correct place in this code
+according to what sprite will be written first, so using this approach isn't
+that simple...
+
+
+2.7 Eliminating flicker in raster interrupts 
+
+Sprite multiplexing in games is quite an unpredictable operation, because the
+sprites can be anywhere. If one just blindly follows the sorted Y-coordinates
+and fires up raster interrupts according to them, flicker & slowdown (caused
+by the new raster interrupt being higher or at same position than the current
+$d012 value) may occur in at least these cases:
+
+- The next raster interrupt is so close to the current that we are already late
+  from it, according to $d012
+
+- The bottom scorepanel raster interrupt (ok, this is not in all programs, but
+  in quite many) has been missed because of sprite multiplexing.
+
+The first thing to do is to make sure that sprites outside the visible screen
+aren't displayed. Also it's a good idea to remove a couple extra lines from the
+bottom of the screen: if scorepanel begins at line 200 then don't allow for
+example sprite Y-coordinates 198 & 199 to be displayed.
+
+The second is to simply introduce this checking code at the end of each raster
+interrupt, whose location/duration we're unsure of. In this example the
+accumulator contains the position of the next raster interrupt.
+
+                sta $d012
+                sec
+                sbc #$03
+                cmp $d012                       ;Late from next IRQ?
+                bcc go_to_irq_directly
+
+Note that the go_to_irq_directly should skip all register saving/restoring, as
+well as interrupt acknowledging (obvious.) 3 lines feel like paranoidically
+much "safety" for the interrupt but in fact I got flicker in some rare cases
+if I was subtracting only 2.
+
+These two things won't prevent game slowdown when the CPU simply has too much
+to do and they won't prevent graphical errors when there's simply too many
+sprites in one place, but at least they prevent the dreaded flickering and
+music slowdown. :)
+
+
+3. Conclusion
+
+To see actual whole multiplexers written in ASM, I recommend the following:
+
+<a href="multi.zip">An example general multiplexer</a>
+("Ocean" sorting, now with $d010 handling)
+
+In these following games, the source code files concerning sprite multiplexing
+are sprite.s and raster.s.
+
+<a href="../games/mw3src.zip">Metal Warrior 3 source code</a>
+(doublebuffering, inaccurate "Y divided by 8" sorting, precalculation of raster
+interrupts)
+
+<a href="freedir.zip">The Freedirectional Scrolling test program</a>
+(doublebuffering, radix sorting of Y-coords)
+
+<a href="../games/bofhsrc.zip">BOFH source code</a>
+(doublebuffering, radix sorting of Y-coords, priority mechanism to make
+standing characters display over, not beneath, bodies & items for example)
+
+<a href="multi2.zip">Improved general multiplexer</a>
+(adapted from Hessian: doublebuffering, "SWIV" sorting, precalculation of interrupts)
+
+Also, you can try reverse-engineering your favorite game that you know to use
+more than 8 sprites! In an ML monitor, you can search for bytes $01 $d0
+(writes to the first sprite's Y coordinates), or to other sprite registers,
+or just look around the code at the IRQ address, usually there's multiplexing
+code nearby.
+
+When you look at the indexed accesses made in the sprite display interrupt code,
+you'll usually notice one memory access whose result doesn't go into any sprite
+I/O register, but is used as an index (either in X or Y register) for accesses
+into other sprite arrays. This is likely the sprite order array, and by looking
+for memory references to it you'll find the sortroutine.
+
+Good luck in your multiplexer experiments! Remember, when you get your
+multiplexer running, stress-test it with abnormal amounts of sprites...
+
+
+                                                  Lasse Öörni
+                                                  <a href="mailto:loorni@gmail.com">loorni@gmail.com</a>
+</pre>
+</body>
+</html>

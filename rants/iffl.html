@@ -1,0 +1,935 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+An IFFL system experiment by Cadaver & Soci
+-------------------------------------------
+
+0. Introduction
+
+IFFL (Interflexible File Loader or Integrated File Flexible Loader) is a
+system where all data files needed by a program are combined into one big
+file. This is typically seen in some newer game cracks. This rant
+describes my personal experiment of building such loadersystem.
+
+Note: use the IFFL system at your own risk! It's only meant for educational use
+though it might work fairly well. Loading of packed files (whatever packer you
+might need) is left as an exercise, by default it only loads unpacked files.
+
+Note 2: IFFL sector scanning code inspired by works of Triad (Quorthon?) &
+Nostalgia (Fungus / Zagon / GRG / DocBacardi). Metal Warrior 3 and Myth
+IFFL cracks used for reference.
+
+<a href="iffl.zip">IFFL system disk image and source</a>
+<a href="iffl_ide64.zip">IFFL system modified for IDE64 by Soci</a>
+
+
+1. IFFL theory of operation
+
+The easiest way to do IFFL can be used even without any drive-programming at
+all. To read multiple files from a single file, we simply open the file with
+DOS calls, and start to read, throwing away bytes until we arrive at the
+desired file. This is quite slow.
+
+To speed things up, we must be able to skip directly into the beginning of any
+file within the IFFL datafile. The DOS doesn't have random access capabilities
+for standard files, so we must resort to direct track/sector reading. Good IFFL
+systems also pack the files tightly, so that a file can start right after the
+previous file in the middle of a sector. Therefore, we also need to know the
+start offset within sector for each file.
+
+Again, an easy but bad way is to note each file's start track/sector/offset when
+the IFFL datafile is being created. We store this information somewhere, and
+use it to get to the files. But what happens if the IFFL datafile gets file-
+copied to another place on another disk? All track/sector info is now useless.
+
+Therefore, good IFFL systems "scan" the datafile when first starting up,
+using custom drive code that follows the track/sector chain until the end, and
+makes note of each file's startpoint. You usually see this in IFFL-cracks: the
+diskdrive "sweeps" over the entire disk in a matter of a few seconds.
+
+After the scanning is done, it's easy for the drivecode to use the file track/
+sector/offset information to find each file. Transmitting data to the C64 is
+a bit more complicated than in standard fastloaders: instead of just sending
+full sectors, we must be careful to see where the next file is coming up (might
+be in the middle of a sector) so that any extra bytes don't get transmitted.
+
+
+2. IFFL fileformat
+
+I doubt there is any standard for how IFFL files are formatted, so I invented
+my own. I decided to have 127 files maximum, each with a maximum length of 65535
+bytes. To make the scanning possible, one approach is to store the lengths of
+all files in the datafile, and that's what I did.
+
+The first sector of the IFFL datafile contains the length info. First 127 bytes
+are the length LSB's, and the next 127 are the MSB's. Files will be referred to
+with numbers, so that the file first added is $00, the next $01, then $02 etc.
+
+After this first sector, raw file data follows. There are no additional info
+bytes anymore, just all the files concatenated in order.
+
+In the source package there are 2 simple crossdevelopment utilities: MAKEIFFL
+and ADDIFFL. The first creates an empty IFFL file, with just the 254-byte length
+table, and the second adds a file to it.
+
+
+3. The operation of the drivecode: scanning
+
+To understand how the IFFL system works on the code-level, familiarity with
+standard 1541 fastloaders is required. There's the usual drivecode uploading
+routine, 2-bit data transfer with badline handling, PAL/NTSC speed adjustment
+and Restore protection, and the use of escape bytes to mark "load error" or
+"loading ended OK".
+
+The drivecode starts from the label drv_init. First it has to seek the IFFL
+datafile from the disk directory. Jobcodes are used for sector reading, nothing
+special there. If there is an error at any point, the error code byte will be
+transmitted to the C64, and the drivecode will exit.
+
+When the IFFL datafile is found, its first sector (the file lengths) is read.
+The file length tables are copied from the sector buffer to safety, and then we
+get to the interesting part, the scanning.
+
+We set up buffer 2 track/sector ($0a/$0b) with the next sector of the IFFL file,
+and use the jobcode $e0. This causes the drive to seek the track in question,
+and then execute the code at buffer 2 of the disk drive RAM ($0500).
+
+This transfers control to the drv_scan label. Now the idea is to get the
+information needed for scanning as fast as possible, so that the user doesn't
+get bored. We don't need full data from the sectors, just the track/sector links
+so that we can follow the IFFL file.
+
+I first tested using the ROM routines to do the following:
+
+- Read the sector (stored in $0b) header & wait for sync (ROM)
+- Read & decode 5 GCR bytes from the sector start
+- Check for any files starting on this sector, then follow the T/S link
+- Repeat until end of the IFFL file
+
+But this was quite slow. To speed it up, we must abandon going through the
+sectors in order. Instead we can get the T/S links from all the sectors on the
+track in a single revolution, and afterwards we can "virtually" follow them.
+The code thus becomes:
+
+- Wait for sync (ROM)
+- Read 5 GCR bytes (sector header) to $0400
+- Check that it is a valid header ($52 is the first GCR byte)
+- Wait for sync (ROM)
+- Read 5 GCR bytes (start of sector data) to $0405
+- Decode the header to get the current sector number (ROM)
+- Decode the sector data start (ROM), and using the sector number as index,
+  store the T/S link
+- Repeat for all sectors of the track
+- Now, go through each sector "virtually", checking for files starting on each
+  sector
+
+When the T/S link indicates that a different track is needed, the drv_scan
+routine has to write the new track to $0a and exit the job returning an OK
+errorcode. Now the main program knows we are not yet finished and starts the
+$e0 job again, unless the track link points to 0, which signals end of the IFFL
+file.
+
+How the "check for files starting on this sector" part is accomplished? I
+did the following: When the scanning first starts, a 16-bit counter is
+initialized with the value 0.
+
+For each sector, the counter value is checked. If it's less than 254, the next
+file starts on this sector and we store the counter's value as the "file offset
+within sector". We also store the current track/sector as the file's start
+track/sector. Then the file's length is added to the counter. We check if the
+counter is still below 254 (many short files can begin on the same sector), and
+if so, repeat the process. Finally, 254 is subtracted from the counter for each
+sector as we traverse to the next.
+
+A file length 0 is used in the length table to mark "no more files". However,
+we allow the scanning routine to fill the track/sector/offset table completely
+(127+1 files, the last as a definite endmark). This is a bit ugly but shortens
+the drivecode a bit, and allows you to give any valid but nonexistent file
+number to the loader without it crashing :)
+
+Finally, it must be noted that the file track/sector tables overwrite the file
+length tables. This saves drive memory, as the file length is no longer needed
+when its start position has been determined.
+
+When the scanning is done without errors, a $00 byte is transmitted to the C64
+to signal success. The INITLOADER routine on C64 receives this byte and sets
+the carry flag accordingly (C=0 for no error)
+
+
+4. The operation of the drivecode: loading
+
+We receive a byte from the C64, in the range 0-126. This is the file number
+to load. The receiving happens using an asynchronous protocol, and if ATN is
+pulled low instead (Kernal I/O), we know to exit the drivecode immediately.
+
+The file number can be used as an index to the track/sector/offset table.
+For each sector the process is following:
+
+- If at the first sector, the send startoffset is the file start offset.
+  Otherwise 0.
+- Check if we are at the next file's first sector. If so, the send endoffset is
+  the next file's start offset, otherwise 254 (full sector transfer).
+- If send endoffset is equal to startoffset, we are right at the EOF and can
+  transfer nothing, so loading is finished. Send escape byte and 0 for OK.
+- Read the sector using jobcodes.
+- Send the sector databytes between startoffset and endoffset. If an escape
+  byte needs to be transmitted as data, send the escape byte twice.
+- Follow the track/sector link to the next sector. If track is 0, the whole
+  IFFL file ends, so loading is finished. Send escape byte and 0 for OK.
+
+If there's an error in reading the sector, the escape byte and the drive
+controller error code ($02-$0f) are sent.
+
+Finally, we loop back to wait for a file number.
+
+
+5. The sourcecode
+
+;-------------------------------------------------------------------------------
+; IFFL-system example with 2-bit transfer by Cadaver 9/2004
+;
+; Use at own risk!
+;-------------------------------------------------------------------------------
+
+                processor 6502
+                org $0801
+
+                dc.b $0b,$08            ;Address of next BASIC instruction
+                dc.w 2004               ;Line number
+                dc.b $9e                ;SYS-token
+                dc.b $32,$30,$36,$31    ;2061 in ASCII
+                dc.b $00,$00,$00        ;BASIC program end
+
+start:          jsr initloader
+                bcs error
+                lda #$00
+                jsr loadfile            ;Load file $00 - music
+                bcs error
+                jsr initmusicplayback
+                lda #$10                ;Try to load some nonexistent file -
+                jsr loadfile            ;should be harmless as long file number
+                lda #$01                ;&lt; MAXFILES
+                jsr loadfile            ;Load file $01 - picture
+                bcs error
+                jsr showpicture
+done:           jmp done                ;Loop endlessly, showing the pic
+
+error:          sta $d020               ;If any error, store errorcode to border and
+                jmp done                ;loop endlessly
+
+initmusicplayback:
+                sei
+                lda #&lt;raster
+                sta $0314
+                lda #&gt;raster
+                sta $0315
+                lda #50                 ;Set low bits of raster
+                sta $d012               ;position
+                lda $d011
+                and #$7f                ;Set high bit of raster
+                sta $d011               ;position (0)
+                lda #$7f                ;Set timer interrupt off
+                sta $dc0d
+                lda #$01                ;Set raster interrupt on
+                sta $d01a
+                lda $dc0d               ;Acknowledge timer interrupt
+                lda #$00
+                jsr $1000
+                cli
+                rts
+
+raster:         jsr $1003
+                dec $d019
+                jmp $ea31
+
+showpicture:    lda #$02                ;Show the picture we just loaded
+                sta $dd00               ;Set videobank
+                lda #59
+                sta $d011               ;Set Y-scrolling / bitmap mode
+                lda #$18
+                sta $d016               ;Set multicolor mode
+                lda #$80
+                sta $d018               ;Set screen pointer
+                lda #$00
+                sta $d020               ;Set correct background colors
+                lda #$01
+                sta $d021
+                ldx #$00
+copycolors:     lda $6400,x             ;Copy the colorscreen
+                sta $d800,x
+                lda $6500,x
+                sta $d900,x
+                lda $6600,x
+                sta $da00,x
+                lda $6700,x
+                sta $db00,x
+                inx
+                bne copycolors
+                rts
+
+;-------------------------------------------------------------------------------
+; IFFL system
+;
+; Call INITLOADER first to scan the IFFL file. Returncode:C=0 OK, C=1 error
+; The IFFL filename is compiled in at the end of the drivecode, so change it
+; as necessary.
+;
+; Call LOADFILE with filenumber in A to load. Returncode:C=0 OK, C=1 error
+; Valid filenumbers are $00-$7e.
+;
+; Use any Kernal file I/O to detach the IFFL drivecode.
+;
+; 2-bit transfer is used so sprites must be off and IRQs can get delayed by a
+; couple of rasterlines.
+;-------------------------------------------------------------------------------
+
+        ;Loader defines
+
+RETRIES         = $05           ;Retries when reading a sector
+MAXFILES        = $7f           ;Max.127 files in the IFFL file
+MW_DATA_LENGTH  = $20           ;Bytes in one M/W command
+
+        ;C64 defines
+
+loadtempreg     = $02
+status          = $90           ;Kernal zeropage variables
+messages        = $9d
+fa              = $ba
+
+ciout           = $ffa8         ;Kernal routines
+listen          = $ffb1
+second          = $ff93
+unlsn           = $ffae
+acptr           = $ffa5
+chkin           = $ffc6
+chkout          = $ffc9
+chrin           = $ffcf
+chrout          = $ffd2
+close           = $ffc3
+open            = $ffc0
+setmsg          = $ff90
+setnam          = $ffbd
+setlfs          = $ffba
+clrchn          = $ffcc
+getin           = $ffe4
+load            = $ffd5
+save            = $ffd8
+
+        ;1541 defines
+
+drvlentbllo     = $0300         ;File length lobytes
+drvlentblhi     = $0380         ;File length hibytes
+drvbuf          = $0400         ;Sector data buffer
+
+drvtrklinktbl   = $0420         ;Track link table for fast scanning
+drvsctlinktbl   = $0440         ;Sector link table for fast scanning
+
+drvtrktbl       = $0300         ;Start track of files (overwrites lentbl)
+drvscttbl       = $0380         ;Start sector of files (overwrites lentbl)
+drvoffstbl      = $0780         ;Start offset of files
+
+buf1cmd         = $01           ;Buffer 1 command
+buf1trk         = $08           ;Buffer 1 track
+buf1sct         = $09           ;Buffer 1 sector
+buf2cmd         = $02           ;Buffer 2 command
+buf2trk         = $0a           ;Buffer 2 track
+buf2sct         = $0b           ;Buffer 2 sector
+drvtemp         = $0c           ;Temp variable
+drvtemp2        = $0d           ;Temp variable, IFFL file number
+drvcntl         = $0e           ;IFFL byte counter for scanning
+drvcnth         = $0f
+iddrv0          = $12           ;Disk drive ID
+id              = $16           ;Disk ID
+buflo           = $30           ;Buffer address lowbyte
+bufhi           = $31           ;Buffer address highbyte
+sectors         = $43           ;Amount of sectors on current track
+
+returnok        = $f505         ;Return from job exec with OK code
+waitsync        = $f556         ;Wait for SYNC
+decode          = $f7e8         ;Decode 5 GCR bytes, bufferindex in Y
+initialize      = $d005         ;Initialize routine (for return to diskdrive OS)
+
+;-------------------------------------------------------------------------------
+; LOADFILE
+;
+; Loads an unpacked file from the IFFL-file. INITLOADER must have been called
+; first.
+;
+; Parameters: A:File number ($00-$7e)
+; Returns: C=0 File loaded OK
+;          C=1 Error
+; Modifies: A,X,Y
+;-------------------------------------------------------------------------------
+
+loadfile:       sta $d07a                       ;SCPU to 1MHz mode
+                jsr sendbyte                    ;Send file number
+                lda #$00
+                sta bufferstatus                ;Reset amount of bytes in buffer
+                jsr load_getbyte                ;Get startaddress low
+                sta load_sta+1
+                jsr load_getbyte                ;Startaddress high
+                sta load_sta+2
+load_loop:      jsr load_getbyte                ;Get data byte from file
+load_sta:       sta $1000                       ;and store it
+                inc load_sta+1
+                bne load_loop
+                inc load_sta+2
+                jmp load_loop
+
+load_getbyte:   ldx bufferstatus                ;Bytes still in buffer?
+                beq load_fillbuffer
+                lda loadbuffer-1,x
+                dex
+                stx bufferstatus 
+                inc $d020                       ;Oldskool effect
+                dec $d020
+                rts
+
+load_fillbuffer:
+                jsr getbyte             ;Get number of bytes to transfer
+                beq load_end            ;$00 means load end (either OK or error)
+                sta bufferstatus
+                ldx #$00
+load_fillbufferloop:
+                jsr getbyte             ;Fill the buffer in a loop
+                sta loadbuffer,x
+                inx
+                cpx bufferstatus
+                bcc load_fillbufferloop
+                bcs load_getbyte
+load_end:       jsr getbyte             ;Get reasoncode ($00 = OK, higher = error)
+                cmp #$01
+                pla
+                pla
+                rts
+
+;-------------------------------------------------------------------------------
+; INITLOADER
+;
+; Uploads the IFFL drivecode to disk drive memory and starts it.
+;
+; Parameters: -
+; Returns: C=0 IFFL initialized OK
+;          C=1 Error
+; Modifies: A,X,Y
+;-------------------------------------------------------------------------------
+
+initloader:     sei
+                lda #$00
+il_detectntsc:  ldx $d011              ;Get the biggest rasterline in the
+                bmi il_detectntsc      ;area &gt;= 256 to detect NTSC/PAL
+il_detectntsc2: ldx $d011
+                bpl il_detectntsc2
+il_detectntsc3: cmp $d012
+                bcs il_detectntsc4
+                lda $d012
+il_detectntsc4: ldx $d011
+                bmi il_detectntsc3
+                cli
+                cmp #$20
+                bcc il_isntsc
+                lda #$30                ;Adjust 2-bit fastload transfer
+                sta getbyte_delay       ;delay for PAL
+il_isntsc:      lda #&lt;il_nmi            ;Set NMI vector (let NMI trigger once
+                sta $0318               ;so RESTORE keypresses won't interfere
+                sta $fffa               ;with loading)
+                lda #&gt;il_nmi
+                sta $0319
+                sta $fffb
+                lda #$81
+                sta $dd0d               ;Timer A interrupt source
+                lda #$01                ;Timer A count ($0001)
+                sta $dd04
+                lda #$00
+                sta $dd05
+                lda #%00011001          ;Run Timer A in one-shot mode
+                sta $dd0e
+                lda #&gt;drivecode_drv
+                sta ifl_mwstring+1
+                lda #&gt;drivecode_c64
+                sta ifl_senddata+2
+                lda #(drivecodeend_drv-drivecode_drv+MW_DATA_LENGTH-1)/MW_DATA_LENGTH
+                sta loadtempreg         ;Number of "packets" to send
+                bne ifl_nextpacket
+ifl_sendmw:     lda ifl_mwstring,x      ;Send M-W command (backwards)
+                jsr ciout
+                dex
+                bpl ifl_sendmw
+                ldx #MW_DATA_LENGTH
+ifl_senddata:   lda drivecode_c64,y     ;Send one byte of drivecode
+                jsr ciout
+                iny
+                bne ifl_notover
+                inc ifl_senddata+2
+ifl_notover:    inc ifl_mwstring+2      ;Also, move the M-W pointer forward
+                bne ifl_notover2
+                inc ifl_mwstring+1
+ifl_notover2:   dex
+                bne ifl_senddata
+                jsr unlsn               ;Unlisten to perform the command
+ifl_nextpacket: lda fa                  ;Set drive to listen
+                jsr listen
+                lda #$6f
+                jsr second
+                ldx #$05
+                dec loadtempreg         ;All "packets" sent?
+                bpl ifl_sendmw
+                dex
+ifl_sendme:     lda ifl_mestring,x      ;Send M-E command (backwards)
+                jsr ciout
+                dex
+                bpl ifl_sendme
+                jsr unlsn               ;Start drivecode
+                jsr getbyte             ;Get a byte from the drive
+                cmp #$02                ;Error or OK?
+                rts
+
+il_nmi:         rti
+
+;-------------------------------------------------------------------------------
+; GETBYTE
+;
+; Gets one byte from the diskdrive with 2-bit protocol. Sprites must be off.
+;
+; Parameters: -
+; Returns: A:Byte
+; Modifies: A
+;-------------------------------------------------------------------------------
+
+getbyte:        lda $dd00               ;CLK low
+                ora #$10
+                sta $dd00
+getbyte_wait:   bit $dd00               ;Wait for 1541 to signal data ready by
+                bmi getbyte_wait        ;setting DATA low
+                sei
+getbyte_waitbadline:
+                lda $d011
+                clc                     ;Wait until a badline won't distract
+                sbc $d012               ;the timing
+                and #$07
+                beq getbyte_waitbadline
+                lda $dd00
+                and #$03
+                sta $dd00               ;Set CLK high
+getbyte_delay:  bpl getbyte_delay2
+getbyte_delay2: nop
+                nop
+                nop
+                nop
+                sta getbyte_eor+1
+                lda $dd00
+                lsr
+                lsr
+                eor $dd00
+                lsr
+                lsr
+                eor $dd00
+                lsr
+                lsr
+getbyte_eor:    eor #$00
+                eor $dd00
+                cli
+                rts
+
+;-------------------------------------------------------------------------------
+; SENDBYTE
+;
+; Sends one byte to the diskdrive with asynchronous protocol (no timing
+; requirements on C64 or 1541 side)
+;
+; Parameters: A:Byte
+; Returns: -
+; Modifies: A,Y
+;-------------------------------------------------------------------------------
+
+sendbyte:       sta loadtempreg
+                ldy #$08                ;Bit counter
+sendbyte_bitloop:
+                lsr loadtempreg         ;Rotate byte to be sent
+                lda $dd00
+                and #$ff-$30
+                ora #$10
+                bcc sendbyte_zerobit
+                eor #$30
+sendbyte_zerobit:
+                sta $dd00
+                lda #$c0                ;Wait for CLK & DATA low
+sendbyte_ack:   bit $dd00
+                bne sendbyte_ack
+                lda $dd00
+                and #$ff-$30            ;Set DATA and CLK high
+                sta $dd00
+sendbyte_ack2:  bit $dd00               ;Wait for CLK & DATA high
+                bvc sendbyte_ack2
+                bpl sendbyte_ack2
+                dey
+                bne sendbyte_bitloop
+sendbyte_endloop:
+                rts
+
+;-------------------------------------------------------------------------------
+; M-W and M-E command strings
+;-------------------------------------------------------------------------------
+
+ifl_mwstring:   dc.b MW_DATA_LENGTH,$00,$00,"W-M"
+
+ifl_mestring:   dc.b &gt;drv_init, &lt;drv_init, "E-M"
+
+;-------------------------------------------------------------------------------
+; Drivecode
+;-------------------------------------------------------------------------------
+
+drivecode_c64:
+                rorg $500
+drivecode_drv:
+
+;-------------------------------------------------------------------------------
+; Subroutine: scan the IFFL file (executed via jobcode $e0)
+;-------------------------------------------------------------------------------
+
+drv_scan:       lda #&gt;drvbuf
+                sta bufhi
+                lda sectors
+                sta drvtemp
+drv_scansector: lda #&lt;drvbuf            ;Read sector header to $0400
+                jsr drv_scan5bytes
+                lda drvbuf              ;Check for correct header
+                cmp #$52
+                bne drv_scansector
+                lda #&lt;drvbuf+5          ;Read data beginning to $0405
+                jsr drv_scan5bytes
+                ldy #$00
+                sty buflo
+                jsr decode              ;Decode the header
+                lda $54                 ;Take sectornumber
+                pha
+                ldy #$05
+                jsr decode              ;Decode the data beginning
+                pla
+                tax
+                lda $53                 ;Store T/S link to our linktable
+                sta drvtrklinktbl,x     ;so that we can "virtually" loop
+                lda $54                 ;through the sectors later
+                sta drvsctlinktbl,x
+                dec drvtemp             ;Loop until all sectors scanned
+                bne drv_scansector
+
+drv_scanfile:   ldy drvtemp2            ;Current file number
+                lda drvcnth             ;See if the byte counter is less than
+                bne drv_scannext        ;254, otherwise go to next sector
+                lda drvcntl
+                cmp #254
+                bcs drv_scannext
+drv_scanfileok: sta drvoffstbl,y        ;Store file offset
+                adc drvlentbllo,y       ;Now add this file's length to the
+                sta drvcntl             ;byte counter
+                lda drvcnth
+                adc drvlentblhi,y
+                sta drvcnth
+                lda buf2trk             ;Store file track/sector
+                sta drvtrktbl,y         ;(file length gets overwritten but
+                lda buf2sct             ;it's no longer needed at this point)
+                sta drvscttbl,y
+                inc drvtemp2            ;Increment file counter
+                bpl drv_scanfile        ;Fill up the table, then exit
+                lda #$00
+                beq drv_scandone
+
+drv_scannext:   lda drvcntl             ;Now subtract 254 bytes from the counter
+                sec                     ;as we go to the next sector
+                sbc #254
+                sta drvcntl
+                bcs drv_scannextok
+                dec drvcnth
+drv_scannextok: ldx buf2sct
+                lda drvsctlinktbl,x     ;Get next sector from our linktable
+                sta buf2sct
+                lda drvtrklinktbl,x     ;Get next track from our linktable
+                cmp buf2trk
+                beq drv_scanfile        ;If same track, go back to loop for
+drv_scandone:   sta buf2trk             ;files
+                jmp $f505               ;Otherwise, have to return from the
+                                        ;job execution, and execute again
+drv_scan5bytes: sta buflo
+                jsr waitsync            ;Wait for SYNC (clears Y)
+drv_5byteloop:  bvc drv_5byteloop       ;Wait for data from the R/W head
+                clv
+                lda $1c01
+                sta (buflo),y
+                iny
+                cpy #$05                ;Read 5 GCR bytes
+                bne drv_5byteloop
+                rts
+
+;-------------------------------------------------------------------------------
+; Drive main code
+;-------------------------------------------------------------------------------
+
+drv_init:       lda #18                 ;Read first dir sector
+                ldx #1
+drv_dirsctloop: jsr drv_readsector
+                bcs drv_initfail
+                ldy #$02
+drv_fileloop:   lda drvbuf,y            ;File type must be PRG
+                and #$83
+                cmp #$82
+                bne drv_nextfile
+                sty drv_namecmp+1
+                ldx #$03
+                lda #$a0                ;Make an endmark at the 16th letter
+                sta drvbuf+19,y
+drv_namecmp:    lda drvbuf,x
+                cmp drv_filename-3,x    ;Check against each letter of filename
+                bne drv_namedone        ;until at the endzero
+                inx
+                bne drv_namecmp
+drv_namedone:   cmp #$a0                ;If got to a $a0, name correct
+                beq drv_found
+drv_nextfile:   tya
+                clc
+                adc #$20                ;Go to next file
+                tay
+                bcc drv_fileloop
+drv_nextdirsct: ldx drvbuf+1
+                lda drvbuf              ;Any more dir sectors?
+                bne drv_dirsctloop      ;Errorcode $10 not used by 1541
+                lda #$10                ;so use it as "IFFL file not found"
+drv_initfail:   jsr sendbyte            ;Send error code & exit through
+                jmp initialize          ;INITIALIZE
+
+drv_found:      lda drvbuf+1,y          ;IFFL datafile found, get its start
+                ldx drvbuf+2,y          ;track & sector
+                jsr drv_readsector
+                bcs drv_initfail
+                ldy #MAXFILES-1
+drv_copylentbl: lda drvbuf+2,y          ;First sector contains the file lengths.
+                sta drvlentbllo,y       ;Copy them to the length tables
+                lda drvbuf+2+MAXFILES,y
+                sta drvlentblhi,y
+                dey
+                bpl drv_copylentbl
+                lda #$00                ;Clear the length of the last file
+                sta drvlentbllo+MAXFILES ;in case we have full 127 files
+                sta drvlentblhi+MAXFILES
+                sta drvtemp2            ;Clear the scanning file counter
+                sta drvcntl             ;Clear the 16bit IFFL byte counter
+                lda drvbuf              ;Now get the next T/S (where actual
+                sta buf2trk             ;data starts) and perform the scanning
+                lda drvbuf+1            ;with the seek/execute jobcode
+                sta buf2sct             ;(drv_scan at $500 gets executed)
+drv_scanloop:   lda #$e0
+                sta buf2cmd
+                cli
+drv_scanwait:   lda buf2cmd
+                bmi drv_scanwait
+                sei
+                cmp #$02                ;If error, abort
+                bcs drv_initfail
+                lda buf2trk             ;Keep calling the job until the file is
+                bne drv_scanloop        ;at an end
+                jsr drv_sendbyte        ;Now A=0, send the byte so that C64
+                                        ;knows the file was scanned successfully
+
+drv_mainloop:   cli                     ;Allow interrupts so drive may stop
+                jsr drv_getbyte         ;Get file number from C64
+                tay                     ;(file number also now in drvtemp2)
+                lda drvoffstbl,y        ;Get file start offset
+                sta drv_mainsendstart+1
+                lda drvtrktbl,y         ;Get file start track & sector
+                sta buf1trk
+                lda drvscttbl,y
+                sta buf1sct
+
+drv_mainsctloop:ldy drvtemp2            ;Get the file number back
+                ldx #$fe                ;Assume we'll send a full sector (254b.)
+                lda buf1trk             ;If we're on the startsector of the
+                cmp drvtrktbl+1,y       ;next file, we can only send up to the
+                bne drv_mainnotlast     ;next file's startoffset
+                lda buf1sct
+                cmp drvscttbl+1,y
+                bne drv_mainnotlast
+                ldx drvoffstbl+1,y      ;If endoffset = startoffset, we're
+                cpx drv_mainsendstart+1 ;already on the next file and can't
+                beq drv_mainfiledone    ;send anything
+drv_mainnotlast:stx drv_mainsendend+1
+                jsr drv_readsector2     ;Read sector, abort if failed
+                bcs drv_mainfilefail
+
+drv_mainsendend:ldy #$00
+                cpy #$fe
+                php
+                tya
+                sec
+                sbc drv_mainsendstart+1 ;Get amount of bytes to send
+                jsr drv_sendbyte
+drv_mainsendloop:
+                lda drvbuf+1,y          ;Send buffer backwards
+                jsr drv_sendbyte
+                dey
+drv_mainsendstart:
+                cpy #$00
+                bne drv_mainsendloop
+                plp                     ;See if it was a partial sector
+                bne drv_mainfiledone    ;(last one)
+
+drv_mainnextsct:lda #$00
+                sta drv_mainsendstart+1 ;Startoffset for next sector is 0
+                lda drvbuf+1            ;Follow the T/S link
+                sta buf1sct
+                lda drvbuf
+                sta buf1trk             ;Go back to send the next sector,
+                bne drv_mainsctloop     ;unless IFFL file end encountered
+drv_mainfiledone:
+                lda #$00                ;Errorcode 0: all OK
+drv_mainfilefail:
+                pha                     ;File end: send $00 and errorcode
+                lda #$00
+                jsr drv_sendbyte
+                pla
+                jsr drv_sendbyte
+                jmp drv_mainloop        ;Then go back to main to wait for
+                                        ;file number
+
+;-------------------------------------------------------------------------------
+; Subroutine: send byte in A to C64 using 2-bit protocol (no IRQs allowed)
+;-------------------------------------------------------------------------------
+
+drv_sendbyte:   sta drvtemp
+                lsr
+                lsr
+                lsr
+                lsr
+                tax
+                lda #$04
+drv_sendwait:   bit $1800               ;Wait for CLK==low
+                beq drv_sendwait
+                lsr                     ;Set DATA=low
+                sta $1800
+                lda drv_sendtbl,x       ;Get the CLK,DATA pairs for low nybble
+                pha
+                lda drvtemp
+                and #$0f
+                tax
+                lda #$04
+drv_sendwait2:  bit $1800               ;Wait for CLK==high (start of high speed transfer)
+                bne drv_sendwait2
+                lda drv_sendtbl,x       ;Get the CLK,DATA pairs for high nybble
+                sta $1800
+                asl
+                and #$0f
+                sta $1800
+                pla
+                sta $1800
+                asl
+                and #$0f
+                sta $1800
+                nop
+                nop
+                lda #$00                ;CLK=DATA=high
+                sta $1800
+                rts
+
+;-------------------------------------------------------------------------------
+; 2-bit send table
+;-------------------------------------------------------------------------------
+
+drv_sendtbl:    dc.b $0f,$07,$0d,$05
+                dc.b $0b,$03,$09,$01
+                dc.b $0e,$06,$0c,$04
+                dc.b $0a,$02,$08,$00
+
+;-------------------------------------------------------------------------------
+; Subroutine: get byte from C64 in A
+;-------------------------------------------------------------------------------
+
+drv_getbyte:    ldy #$08                ;Counter: receive 8 bits
+drv_recvbit:    lda #$85
+                and $1800               ;Wait for CLK==low || DATA==low
+                bmi drv_gotatn          ;Quit if ATN
+                beq drv_recvbit
+                lsr                     ;Read the data bit
+                lda #2                  ;Prepare for CLK=high, DATA=low
+                bcc drv_rskip
+                lda #8                  ;Prepare for CLK=low, DATA=high
+drv_rskip:      sta $1800               ;Acknowledge the bit received
+                ror drvtemp2            ;and store it
+drv_rwait:      lda $1800               ;Wait for CLK==high || DATA==high
+                and #5
+                eor #5
+                beq drv_rwait
+                lda #0
+                sta $1800               ;Set CLK=DATA=high
+                dey
+                bne drv_recvbit         ;Loop until all bits have been received
+                lda drvtemp2            ;Return the data to A
+                rts
+drv_gotatn:     pla                     ;If ATN goes low, exit to the operating
+                pla                     ;system. Discard the return address and
+                jmp $d00e               ;jump to the INITIALIZE routine
+
+;-------------------------------------------------------------------------------
+; Subroutine: read sector
+;-------------------------------------------------------------------------------
+
+drv_readsector: sta buf1trk
+                stx buf1sct
+drv_readsector2:ldy #RETRIES            ;Retry counter
+drv_readsectorretry:
+                lda #$80
+                sta buf1cmd
+                cli
+drv_readsectorpoll:
+                lda buf1cmd
+                bmi drv_readsectorpoll
+                sei
+                cmp #$02                ;Errorcode
+                bcc drv_readsectorok
+                ldx id                  ;Handle possible disk ID change
+                stx iddrv0
+                ldx id+1
+                stx iddrv0+1
+                dey                     ;Decrement retry counter and try again
+                bne drv_readsectorretry
+drv_readsectorok:
+                rts
+
+;-------------------------------------------------------------------------------
+; IFFL filename
+;-------------------------------------------------------------------------------
+
+drv_filename:   dc.b "IFFLDATA",0
+
+drivecodeend_drv:
+                rend
+drivecodeend_c64:
+
+;-------------------------------------------------------------------------------
+; Load buffer
+;-------------------------------------------------------------------------------
+
+loadbuffer:     ds.b 254,0
+bufferstatus:   dc.b 0
+
+6. Conclusion
+
+The IFFL code can be a bit complex to understand, but don't be discouraged.
+It's free to be used for any purpose, though for it to be really useful you
+likely have to add loading of packed files, and perhaps multi-drive support?
+
+Personally I'm likely to never use an IFFL system, because the datafile can 
+be clumsy to copy on a C64 and a second version of the loader would have
+to be created for 64HDD or IDE64 compatibility - buffering the whole
+datafile to extra-RAM and using it from there, not good for users without
+extra-RAM :(
+
+But, even that said, have fun!
+
+
+                                                  Lasse Öörni
+                                                  <a href="mailto:loorni@gmail.com">loorni@gmail.com</a>
+</pre>
+</body>
+</html>

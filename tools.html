@@ -1,0 +1,301 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<center>
+
+<p><br><br></p>
+
+<p>
+<font face="Arial" size="4">
+Tools
+</font>
+</p>
+
+<table width="600">
+<tr>
+<td>
+<font face="Arial" size="2">
+<p align="justify">
+Only the Covert Bitops Loadersystem, NinjaTracker, SadoTracker and GoatTracker
+Tweak Utility are actual C64 programs; rest of them require a 32-bit
+Unix-like system or Windows.
+</p>
+<p align="justify">
+<font size="4">
+C64 Tools collection
+</font>
+</p>
+<p align="justify">
+Contains several background graphics editors, 2 sprite editors and several
+other commandline utilities.
+Precompiled binaries for Win32 only but verified to compile also under
+Linux. The utilities use <a href="http://www.libsdl.org">SDL library</a>
+for lowlevel support.
+<br><br>
+<a href="tools/c64tools.zip">Download</a><br>
+<a href="http://www.os4depot.net/share/development/cross/c64tools.lha">Download for Amiga OS4</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+Covert Bitops Loadersystem V2.26
+</font>
+</p>
+<p align="justify">
+A loader/depackersystem that is free to use and customize for all kinds of C64 productions.
+Features include:
+</p>
+<p align="justify">
+<li>Autodetects whether fastloading can be used and if the device used is
+a serial device or not</li>
+<li>Fastloader support on 1541, 1571, 1581, CMD FD and CMD HD drives</li>
+<li>"Fake" IRQ-loading on IDE64 and "fast drive emulation", see documentation
+for details</li>
+<li>Use of 2-letter or long filenames</li>
+<li>Loading of unpacked, exomized (Exomizer 1 or 2) or pucrunched files</li>
+<li>Option to use 2-bit fastloader protocol (faster speed, but delays interrupts
+and no sprites allowed)</li>
+<p align="justify">
+<b>V2.26 adds * wildcard support to long filenames.</b><br>
+<br>
+<a href="tools/loader226.zip">Download</a>
+<br><br>
+Old versions of the loader (not recommended):<br>
+<a href="tools/loader212.zip">Download V2.12</a><br>
+<a href="tools/loader.zip">Download V2.05</a><br>
+<br>
+</p>
+
+<p align="justify">
+<font size="4">
+DASM Win32 & Linux port
+</font>
+</p>
+<p align="justify">
+This is an unofficial port of the DASM crossassembler by Matthew Dillon
+(modified by Olaf Seibert), with some fixes, including better error
+handling. See also the <a href="http://dasm-dillon.sourceforge.net/" 
+target="_top">DASM official home page</a>, the latest version from there 
+should compile CovertBitops productions also, when used in conjunction with an 
+updated C64 Tools collection.
+<br><br>
+<a href="tools/dasm.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+GoatTracker V2.73 / GoatTracker V2.74 Stereo
+</font>
+</p>
+<p align="justify">
+This is a crossplatform C64 music editor.
+Supports output via Dag Lem's <a href="http://en.wikipedia.org/wiki/ReSID" target="_top">
+reSID engine</a>, the <a href="http://www.hardsid.com" target="_top">HardSID 4U USB device & HardSID soundcards</a>
+or <a
+href="http://www.jschoenfeld.de/products/cwmk3_e.html" target="_top">CatWeasel
+MK3</a>.<br><br>
+
+From V2.0 onwards the editor includes more powerful step-programming
+(wave/arpeggio, pulse and filter), 63 instruments, more instrument parameters
+& pattern commands. May be less userfriendly than V1.xx, but you can import
+V1.xx songs and instruments to see how the corresponding V2 features work.
+Rastertime usage has stayed about the same. Also available in stereo.<br><br>
+<b>V2.73 adds full SID buffering option and external relocator utility. V2.74 Stereo writes proper v3 headers for SidPlay.</b> <br><br>
+<a href="http://sourceforge.net/projects/goattracker2" target="_top">GoatTracker 2 SourceForge page</a><br><br>
+<a href="tools/goattrk2.zip">Download</a><br>
+<a href="tools/gt2stereo.zip">Download stereo version</a><br>
+<a href="http://packages.debian.org/goattracker" target="_top">Download for Debian</a><br>
+<a href="http://www.twinbirds.com/goattracker/GoatTracker.zip" target="_top">Download for Mac</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+GoatTracker V2.x Tweak Utility
+</font>
+</p>
+<p align="justify">
+A C64 program that loads/saves GoatTracker2 song files and allows editing
+of the song data (orderlists, patterns, instruments, tables). NOTE: loads only
+GT V2.59+ song format (GTS5), so re-save your old songs first!
+<br><br>
+<a href="tools/tweak2.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+NinjaTracker V2.04
+</font>
+</p>
+<p align="justify">
+A C64 music editor with quite minimal featureset. Changes to previous
+versions include commands (also used as instruments), 2-column tables
+and a slide function that stops at target pitch. As before, allows to
+save both normal executable musicdata and gamemusic data without the player.
+<br><br>
+V2.04 fixes transpose not resetting when playback is started from the beginning.
+<br><br>
+<a href="tools/ninjatr204.zip">Download<br></a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+GoatTracker2 to NinjaTracker2 converter V1.02
+</font>
+</p>
+<p align="justify">
+Utility that converts GoatTracker2 songs to NinjaTracker V2.03+ format with some
+limitations. Songs that work within the limitations can then be played back with
+less memory and rastertime consumption.
+<br><br>
+V1.02 optimizes saving instrument vibrato to wavetables.
+<br><br>
+<a href="tools/gt2nt2.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+RawGoat V2.0
+</font>
+</p>
+<p align="justify">
+This is a stripped-down version of GoatTracker V2.xx, with reduced playroutine
+rastertime & memory usage. Supports only GT V1.xx effects and has several features
+removed, details in the readme file. Also note that this program is essentially
+unsupported (originally meant for internal use only), so use only if you really need it!
+<br><br>
+<a href="tools/rawgoat.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+SadoTracker
+</font>
+</p>
+<p align="justify">
+A nice & simple C64 music editor written in 1999. Music for Advanced Action
+Movie Simulator, Escape From New York & Metal Warrior 2 has been done
+with this program.
+<br><br>
+<a href="tools/sadotrak.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+SIDDasm V1.0
+</font>
+</p>
+<p align="justify">
+Written by Gufino, this program produces disassembler output
+of .SID music files, so that you'll be able to see the musicroutine
+code. Both DOS & Linux versions available, with source code included.
+<br><br>
+<a href="tools/siddasm1.zip">Download for DOS</a><br>
+<a href="tools/siddasm1.tar.gz">Download for Linux</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+SIDDump V1.06
+</font>
+</p>
+<p align="justify">
+An utility that executes .SID file player code and outputs SID chip register & note data.
+Note that illegal opcode support is lacking, only enough to make John Player tunes work, and also the
+player enviroment is far from correct (basically just the CPU and 64kB of empty RAM)
+<br><br>
+V1.06 adds CPU cycle profiling contributed by Stein Pedersen.
+<br><br>
+<a href="tools/siddump.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+SIDId V1.09
+</font>
+</p>
+<p align="justify">
+A quick & dirty HVSC playroutine identity scanner. Playroutine signatures can
+be controlled via a configuration file. Additional signatures by
+Yodelking, Ian Coog, ice00, Ninja & Wilfred/HVSC. NOTE: Re-check zip file periodically for added signatures!
+<br><br>
+<a href="tools/sidid.zip">Download</a><br>
+<a href="https://github.com/cadaver/sidid" target="_top">Github repository</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+GoatTracker V1.xx and related
+</font>
+</p>
+<p>
+GoatTracker V1.53 Stereo <a href="tools/gstereo.zip">Download</a><br>
+GoatTracker V1.53 <a href="tools/goattrk.zip">Download</a><br>
+GoatTracker V1.25 <a href="tools/goatold.zip">Download</a><br>
+GoatTracker V1.xx Tweak Utility <a href="tools/tweak.zip">Download</a><br>
+GoatTracker V1.xx -> NinjaTracker converter <a href="tools/goatninj.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+NinjaTracker V1.xx</font>
+</p>
+<p>
+NinjaTracker V1.1 <a href="tools/ninjatrk.zip">Download</a><br>
+NinjaTracker V1.02 <a href="tools/ninja102.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+BME library
+</font>
+</p>
+<p>
+Not C64-related in itself, it's a graphics/sound/input library that the
+graphical utilities use, using in turn <a href="http://www.libsdl.org">SDL
+library</a> for lowlevel support. Contains 100% C code and should be
+endian-independent. The library and required include files come also with
+the editors but this package contains the full source for the library
+itself.
+<br><br>
+<a href="misc/bme.zip">Download</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+GoatStudio
+</font>
+</p>
+<p>
+Neither is this C64-related, it's a very simple console application
+multitrack recording program (up to 12 tracks, 48 kHz). Works in 32-bit
+Windows only.
+<br><br>
+<a href="misc/gstudio.zip">Download</a>
+<br><br>
+</p>
+
+</td>
+</tr>
+</table>
+<br>
+<br>
+
+</center>
+</body>
+</html>

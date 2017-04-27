@@ -1,0 +1,436 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Building a musicroutine by Cadaver
+----------------------------------
+
+This is another not so deep rant, dealing with things mainly at concept level
+instead of going deep into the code. However, at the end there's a link to a
+simple example musicroutine written exclusively for this rant. You should be
+familiar with programming the SID registers to understand the ideas presented
+here.
+
+This rant is very much inspired by the music & musicroutine related articles
+written by Jori Olkkonen (YIP) and published in the "C-lehti" magazine during
+the year 1987. He did a similar approach, not concentrating on actual ASM code
+but handling things on a concept level.
+
+
+0. Why program an own musicroutine?
+
+There are already hundreds of musicroutines in countless C64 music editors. But
+still, I think every musically-minded coder should try writing an own C64
+musicroutine one day.
+
+- It is a unique, fun challenge, with sufficiently limited scope. Trying to
+  balance features, memory use, and speed is an eternal quest...
+
+- A self-written musicroutine will have exactly the features you want, and
+  nothing more. How much it takes rastertime and with what features, reflects
+  exactly your skills as a coder and optimizer.
+
+
+1. The building blocks of a musicroutine
+
+Basically, the task of a musicroutine is to play music (and possibly sound
+effects in addition.) At the very basic level a music routine has to be capable
+of:
+
+- Reading note data in some form, setting those note(s) to play, and waiting
+  for the correct amount of time before setting the next note(s) to play.
+
+This sounds like a very simple & very oldskool musicroutine. It's been said
+that the one in Forbidden Forest by Paul Norman is simple & easy to understand.
+
+Now let's talk about a more advanced musicroutine. It should have:
+
+- A sequence data for each voice, that contains numbers of patterns to be
+  played (other methods for defining repeating blocks of music could be used,
+  but this is the most common.) The sequence data can also include transpose 
+  commands (for example a single bassline can be played in both C-major and 
+  G-major to conserve memory) and repeat commands (play the same pattern many
+  times.) 
+
+- The pattern data containing the notes themselves, commands to set note
+  duration, change to a different instrument (sound) and any other imaginable
+  things.
+
+- The possibility to control these things for each voice (usually, many of
+  these features are stored within the instrument (sound) data.)
+  * ADSR envelope
+  * Pulsewidth, and modulating it (changing smoothly)
+  * Vibrato (modulating the frequency of a note back and forth)
+  * Sliding (smooth change of frequency, either up or down)
+  * Waveforms and arpeggios. Usually combined under a single table
+  * Hard restart. A few (usually two) frames before the start of a new note
+    the gatebit is cleared and attack/decay + sustain/release are set
+    to a preset value (usually 0), to make sure the attack of the next
+    note starts reliably. In an advanced routine, this can be turned on
+    and off at will, or several different methods of hardrestart can
+    be chosen.
+  * Tying notes to each other, that is just to change the frequency but to not
+    clear the gatebit, perform hardrestart or re-init pulsewidth. This can be
+    used to simulate guitar riffs using pull-off and hammer-on techniques...
+
+- Filter control. There's only one filter so chaos would result if multiple
+  voices tried to control it at the same time. Filter control can include
+  changing the filter type, voices the filter affects, cutoff and resonance.
+  Cutoff can also be changed smoothly (modulation).
+
+- Possible sound effect support for games. An advanced feature is to allow
+  a sound effect to interrupt music playback on a voice; after the effect is
+  finished the music continues (for example Commando music by Rob Hubbard.)
+
+
+1.1. Timing in a musicroutine, execution flow, "ghost registers"
+
+Traditionally, C64 music routines are frame-based. That means they're called
+from a raster interrupt during each frame (50 times/second for PAL) or by other
+means of keeping a steady timing.
+
+So, the music routine can count the amount of frames it has been called to
+generate the tempo of the music. Typically this means decreasing a note
+duration counter each frame, and when this counter reaches zero, it is time
+to fetch a new note.
+
+The musicroutine also has to loop through all the 3 voices for multi-voice
+music. So it's essential to use the X or Y index registers for all accesses
+to voice variables, to avoid having to write the same code 3 times
+(in *extremely* optimized musicroutines, like the one in
+<a href="http://www.student.oulu.fi/~aeeben/johnplayer.html" target="_top">John Player by Aleksi Eeben</a> this rule is deliberately broken!)
+
+The usual flow of musicroutine execution is:
+- Process one frame of 1st voice
+- Process one frame of 2nd voice
+- Process one frame of 3rd voice
+- Process one frame of non-voice specific things (filter!)
+
+Remember that SID registers are write-only. Therefore you need to have your
+own way of storing for example the voice frequency to be able to change it
+smoothly from frame to frame. An easy approach is to have a "ghost registers"
+for every SID register and at the end of musicroutine execution, dump all the
+ghost register values to the SID itself. However, not every register has to
+change on every frame, so this approach wastes some time. It must be noted
+that this approach produces the best, sharpest sound quality, because there's
+as little delay as possible between the SID writes.
+
+
+1.2. The frequency of notes
+
+Another important building block of music: it probably sounds better if it is
+in tune... Frequency tables for notes exist in the C64 User's Guide and the C64
+Programmer's Reference Guide, or you can also calculate one yourself. It's
+usually easiest & fastest to just store frequencies of all notes, all octaves
+to a lookup table and get them from there when needed.
+
+As each multiplication of the frequency by 2 raises the voice one octave,
+frequency slides and vibrato appear slower in the higher octaves than in the
+lower. I recommend taking a look at the Rob Hubbard musicroutine dissection in
+<a href="http://www.ffd2.com/fridge/chacking/c=hacking5.txt" target="_top">C=Hacking Issue 5</a>, there a method to counteract this is shown.
+Basically, it involves taking a note's frequency and subtracting it from the
+neighbour note's (one halfstep lower) frequency and using this value as the
+basis for vibrato & slide speed. Smaller speeds achieved by bit-shifting the
+value to the right. I used this method in the SadoTracker musicroutine but be
+warned: it is kind of slow.
+
+
+2. Features & effects
+
+2.1 ADSR
+
+An instrument has the ADSR values that will be put to use whenever a note is
+played using that instrument. For echo-like effects, there could also be the
+possibility to modify the sustain/release register in the middle of a note with
+a pattern data command.
+
+2.2 Pulsewidth and pulsewidth modulation
+
+Usually in the beginning of a new note, the pulsewidth is initialized to the
+fixed value given in the instrument data. Some routines might also have the
+possibility to leave it uninitialized if so desired (continuing the pulsewidth
+modulation of the previous note.)
+
+As the note plays on, the pulsewidth can then be changed (modulated) for
+interesting effects. There are many ways to assign the parameters for this, one
+way is:
+
+Initial pulsewidth
+Pulsewidth modulation speed
+Pulsewidth limit low
+Pulsewidth limit high
+
+So, the speed will be added/subtracted to pulsewidth on each frame and the
+limits tell when to change the direction (if pulsewidth crosses over its
+whole range from $fff back to $000 an ugly sound is heard, so it's a good
+idea to prevent that)
+
+More advanced routines might have a table-based pulsewidth modulation control.
+The table can contain commands suchs as "add the value &lt;m&gt; to pulsewidth for
+&lt;n&gt; frames" or "set pulsewidth to &lt;n&gt;" and jump command to a different
+location in the table / command to end pulse-table execution. I'll be referring
+to this table based effect execution idea in other effects too, in arpeggios
+it's most common.
+
+
+2.3 Vibrato
+
+Vibrato can either be part of the instrument data or be controlled with
+separate pattern data commands. Vibrato usually needs the following parameters:
+
+Time in frames before starting vibrato (unnecessary if using a command)
+Speed of vibrato (how much the frequency is changed each frame)
+Width of vibrato (how many frames before changing direction)
+
+It can also be implemented table-based for more possibilities. Note that for
+the vibrato to stay in tune the frequency must follow the following diagram:
+
+                /\        /\
+               /  \      /  \
+        ------/    \    /    \ etc.
+                    \  /
+                     \/
+
+So you see that when vibrato starts, the first part of pitch going up must
+only be half as long as the rest, to make the frequency go up & down around
+the correct frequency of the note.
+
+
+2.4 Slides
+
+A slide is almost always implemented as a pattern data command rather than
+something belonging to the instrument data. It requires two parameters:
+
+Slide speed (how much, and to what direction the frequency changes each frame)
+The duration of the slide
+
+The duration can also be answered by the note duration. It can be interpreted
+so that the sliding is a special case of a note. When the duration ends, the
+sliding ends and next note will be read.
+
+There can be also more advanced slides that stop automatically when a "target"
+note has been reached. This is called "toneportamento" in the Amiga & PC
+tracker programs.
+
+
+2.5 Waveforms and arpeggios
+
+These are usually a property of the instrument. My typical approach is that
+the waveform/arpeggio-table will be used in the case of each instrument to
+initialize the initial note pitch & waveform, even if the note doesn't contain
+any complex waveform/arpeggio effect (like drumsounds) or an arpeggio loop.
+
+The waveform/arpeggio-table usually contains byte pairs; the other byte is
+what to put in the waveform register and the other is the note number; either
+relative (arpeggios) or absolute (drumsounds). As with table-based effect
+execution in general, there can (should) be a jump command and a command to
+end the waveform/arpeggio execution. There can also be special cases, like
+a waveform 0 used to indicate the waveform doesn't change.
+
+There can also be a pattern data command for changing the arpeggio table
+startlocation for the coming notes. This can be used for example to play
+different chords without having to create an own instrument for each of them.
+
+
+2.6 Hard restart
+
+2.6.1 Old method
+
+This method is what old players such as Hubbard's use. It works well on
+both PAL & NTSC machines and isn't sensitive to timing.
+
+To execute the hard restart, clear the waveform register's gate bit and
+set ADSR registers to 0 a couple of frames before the note's end (for
+example, when the decreasing duration counter hits the value 2)
+
+When starting a new note after a hard restart, the registers should be
+written to in this order: Waveform - Attack/Decay - Sustain/Release. This
+is actually the same order they appear in memory and ensures the sharpest
+attack possible.
+
+2.6.2 Modern, or "testbit" method
+
+Used in newer players such as JCH-player and DMC. Works reliably on PAL
+machines only, but gives a nice sharp sound.
+
+2 or more frames before the next note, the ADSR is set to a preset value,
+such as $0000, $0f00 or $f800 (the ADSR setting can also be skipped), and
+the gatebit is cleared.
+
+On the first frame of the note, the instrument's Attack/Decay and
+Sustain/Release values are written first. Then, $09 is written to the
+Waveform register (testbit + gate). 
+
+Only on the next (second) frame of the note, its own waveform value is
+loaded, and the note is actually heard.
+
+In this method it's important that Attack/Decay and Sustain/Release are
+always written before Waveform. There might also be a necessity for some
+delays between them for maximum reliability.
+
+
+2.7 Tied notes
+
+Simple: don't reset gatebit, don't do hardrestart, don't reset pulsewidth, just
+change the frequency. GoatTracker implements tied notes as infinitely fast
+toneportamentos (slides).
+
+
+2.8 Filter and filter modulation
+
+This is a good opportunity for another table-based effect. There can be
+commands like "add &lt;m&gt; to cutoff frequence for &lt;n&gt; frames". The additional
+trouble is that either only one voice must control the filter at a time
+(there can be a patterndata command to set that) or then the filter operation
+can be completely separate from the instruments, operated only by pattern data
+commands.
+
+
+2.9. Sound effects
+
+Playing sound effects within a musicroutine can be done at least in two ways:
+
+- A voice has to be dedicated for sound effects and can't be used to play
+  musical notes at all. Now, the sound effects can be for example special
+  patterns whose playing is commenced when a sound effect starts.
+
+- Sound effects interrupt the musical notes on a given voice, but "underneath"
+  the song playback goes forward, and after the sound effect ends new musical
+  notes can be played again on that channel. This approach means using a
+  different set of variables for a voice's music and sound effect execution;
+  most likely the sound effect can't now be a pattern with notes but something
+  simpler instead, for example something similar to the waveform/arpeggiotable.
+
+
+3. How to represent the data in memory
+
+It's good to be memory-effective when storing the music data. This chapter
+offers some suggestions for possible encodings.
+
+
+3.1 Sequence data
+
+It's most likely going to be 8-bit for effectiveness. If you want for example
+128 different patterns, one possible encoding for sequence data bytes could be:
+
+$00-$7f - pattern numbers
+$80-$bf - transpose command
+$c0-$fe - repeat command
+$ff     - jump command, followed by jump position byte
+
+
+3.2 Pattern data
+
+Here it gets a lot more complicated. How do you represent notes with the
+smallest amount of bytes possible? Look at Rob Hubbard's routine (see the link
+above) for one approach, it uses bits to indicate whether additional bytes
+(like instrument number, possible special commands) are coming in addition
+to the note itself.
+
+The approach I used in SadoTracker is a bit different, there bytes have encoded
+meanings like in the sequence data above. I don't remember the exact meanings
+of all byte ranges but it went something like this:
+
+$00-$5f - Note numbers
+$60-$bf - Note duration commands
+$c0-$df - Instrument change commands
+$e0-$ef - Arpeggio change commands
+$f0-$fe - Other commands (like setting tie-notes on and off)
+$ff     - End of pattern-mark
+
+GoatTracker musicroutines have the following format:
+
+$00-$5d - Note numbers           with command & commanddata bytes
+$5e     - Keyoff (gatebit reset)                -||-
+$5f     - Rest (no action)                      -||-
+$60-$bd - Note numbers           without command & commanddata bytes
+$be     - Keyoff                                -||-
+$bf     - Rest                                  -||-
+$c0-$fe - Long rest, $fe is 2 rows, $fd 3 rows etc.
+$ff     - End of pattern-mark
+
+
+3.3 Instrument data
+
+Basically you should save all instrument properties in such format that using
+them is as fast as possible. For example, a fast, but not most memory-efficient
+way to store pulsewidth is to store it as a 16-bit value. More memory-efficient
+way would be to store it only as 8 bits and assume the 4 least significant bits
+to be always 0. Furthermore, if the nybbles were reversed in memory one could
+use code like this:
+
+        lda pulsewidth,y
+        sta $d402,x
+        sta $d403,x
+
+Here both the high- and low-byte of the pulse are initialized with the same
+value. The high 4 bits also get copied to the low 4 bits but it doesn't hurt.
+
+
+4. Optimizing
+
+As you start writing your musicroutine probably at first you'll be amazed at
+how fast it is; when you add features you'll be cursing at how slow it is.
+But careful optimization can bring the speed back in. Some ideas for
+optimization are presented here.
+
+- Split the note initialization on several frames. This is usually what
+  consumes the most time. For example, going to next pattern in the music data
+  can be done beforehand, and actually reading the note from that pattern on
+  the next frame.
+
+- Avoid subroutine use
+
+- Try to optimize all effect code to the maximum. Usually there's many effects
+  executing at once on one voice (for example pulsemodulation and arpeggio)
+  so their execution times quickly add up.
+
+- Shut off execution of some code during time consuming parts. For example
+  don't perform the continuous effects like vibrato & pulsemodulation at all
+  when also fetching new note data. This makes the soundquality slightly
+  worse...
+
+
+5. The editor
+
+If you've written a good musicroutine you'll probably want to be make music
+with it efficiently. Editing music data with an ML monitor or directly in
+source code can be hardly called effective, therefore an editor is needed.
+I'll warn you: this is going to be a lot of additional work.
+
+
+6. Conclusion/resources
+
+To see the musicroutines I've personally written, you can take a look at:
+
+<a href="music.zip">A really simple musicroutine written exclusively for this rant</a>
+(contains just note data, no sequencedata and only pulsewidth modulation
+effect)
+
+<a href="http://covertbitops.c64.org/tools/goattrk.zip">GoatTracker</a>
+(look at the files player1.s - player2.s. Many features, reasonably fast
+musicroutine(s), sound effect support in player2.s)
+
+<a href="http://covertbitops.c64.org/tools/goattrk2.zip">GoatTracker V2</a>
+(look at the files player1.s - player3b.s. Even more features while keeping
+approximately same rastertime as old GoatTracker)
+
+<a href="http://covertbitops.c64.org/tools/ninjatrk.zip">NinjaTracker</a>
+(minimalistic and fast playroutine centered on the wavetable - it does note
+init, arpeggio and vibrato/slides all in one.)
+
+Also, there are regular playroutine dissections in the <a href="http://digilander.libero.it/ice00/tsid/sidin/" target="_top">SIDin</a> online
+magazine.
+
+If going in-depth with this topic, the rant could easily end up being 50 pages
+long, so I think I'll just stop here. In fact, nothing but your imagination
+(and C64's available memory) limits what you can do within a musicroutine.
+
+
+                                                  Lasse Öörni
+                                                  <a href="mailto:loorni@gmail.com">loorni@gmail.com</a>
+</pre>
+</body>
+</html>

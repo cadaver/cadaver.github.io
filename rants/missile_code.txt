@@ -1,0 +1,692 @@
+;assemble it - game 2 - single player
+;blast 'em game
+
+;in this tutorial, we will show you how
+;to code a 1 player blast 'em game. this
+;will involve eight sprites. one will be
+;the player ship, one will be a bullet
+;and the remaining six will become
+;missiles
+
+;also in this tutorial, you'll be seeing
+;how sprite animations work, and how we
+;control the sprite priorities
+
+;we'll also be adding levels, which will
+;engage the speed of the missiles to
+;make the game a tad on the difficult
+;side.
+
+;there'll also be a shield generator and
+;a scoreboard. we'll also be adding some
+;credits on the front of the screen as
+;well as game over. anyway, enough of
+;chitty chatty clag, let's move on to
+;the hard stuff - the game coding of
+;course :)
+
+;variables for the game
+
+spritepos = $0370    ;positions for the
+                     ;sprites
+
+collision = $03f0    ;collision dection
+
+firelockup = $0330   ;debugged firemode
+
+gameon   = $0331     ;to check if game
+                     ;is on, or not
+
+levelct  = $0332     ;our level counter
+
+missleft = $0333     ;missile counter
+
+pointer  = $0340     ;pointer for multi
+                     ;purpose animation
+                     ;with sprites
+
+nomovebull = $0342
+
+destroy  = $0350     ;pointer to check
+                     ;explosion anim
+plrdestroy = $0351
+
+gameover = $0352
+
+
+
+
+         *= $3800 ;where we start our
+                  ;jmp address
+
+restart  sei      ;set irq flag
+
+         lda #$31  ;we use these
+         ldx #$ea  ;routines here to
+         sta $0314 ;turn off the irq
+         stx $0315 ;so that the game
+         lda #$00  ;wont keep crashing
+         sta $d019 ;when restarting
+         sta $d01a ;during an irq
+         lda #$81  ;routine player.
+         sta $dc0d ;
+         sta $dd0d ;
+         lda #$00  ;no sound
+         sta $d418 ;
+         lda #$08  ;turn off screen
+         sta $d016 ;multicolour
+
+         lda #$00  ;black the frame and
+         sta $d021 ;background
+         sta $d020 ;
+
+         ldx #$00    ;
+title    lda #$0f    ;
+         sta $d800,x ; draw the title
+         sta $d900,x ; screen, and
+         sta $da00,x ; set colour to
+         sta $dae8,x ; grey
+         lda $3400,x ;
+         sta $0400,x ;
+         lda $3500,x ;
+         sta $0500,x ;
+         lda $3600,x ;
+         sta $0600,x ;
+         lda $36e8,x ;
+         sta $06e8,x ;
+         inx         ;
+         bne title
+
+         lda #$1a    ;charset type
+         sta $d018   ;read from $2800
+
+         lda #$00    ;no sprites on
+         sta $d015   ;screen
+
+space    lda $dc01   ;check for spacebar
+         cmp #$ef    ;to be pressed
+         bne space
+
+main     lda #$ff    ;this is where we
+         sta $d015   ;setup and init.
+         sta $d01c   ;all the sprites
+         lda #$0b    ;for our game
+         sta $d025   ;
+         lda #$01    ;
+         sta $d026   ;
+         lda #$80    ;
+         sta $07f8   ;
+         lda #$83    ;
+         sta $07f9   ;
+         lda #$8a    ;
+         sta $07fa   ;
+         sta $07fb   ;
+         sta $07fc   ;
+         sta $07fd   ;
+         sta $07fe   ;
+         sta $07ff   ;
+
+;reposition sprites according to
+;postable.
+
+         ldx #$00
+possprts lda postable+$00,x
+         sta spritepos+$00,x
+         inx
+         cpx #$10
+         bne possprts
+
+;all sprite multi-colour is grey 3
+
+         ldx #$00
+spcols   lda #$0f
+         sta $d027,x
+         inx
+         cpx #$08
+         bne spcols
+
+;draw the space background from reading
+;the stored screen ($3000-$33e8)
+
+         ldx #$00
+spacebgr lda $3000,x
+         sta $0400,x
+         lda $3100,x
+         sta $0500,x
+         lda $3200,x
+         sta $0600,x
+         lda $32e8,x
+         sta $06e8,x
+         lda #$0b
+         sta $d800,x
+         sta $d900,x
+         sta $da00,x
+         sta $dae8,x
+         inx
+         bne spacebgr
+
+         lda #$18  ;turn on screen
+         sta $d016 ;multicolour mode
+         lda #$1a  ;turn on charset
+         sta $d018 ;fron $2800
+
+         lda #$06  ;use blue for
+         sta $d023 ;multicolour 1
+         lda #$0e  ;and lt blue for
+         sta $d022 ;multicolour 2
+
+         ldx #$00    ;read 40 chars to
+status   lda $2700,x ;paste the score
+         sta $0400,x ;from $2700 to the
+         lda #$07    ;screen ram ($400)
+         sta $d800,x ;
+         inx         ;
+         cpx #$28    ;
+         bne status  ;
+
+         lda #$01    ; disable destroy
+         sta destroy ; and set levelct
+         sta levelct ; to level1
+         lda #$00    ; init the no of
+         sta missleft; missiles blasted
+
+         lda #$00       ;disable the
+         sta firelockup ;functions to
+         sta plrdestroy ;lock controls
+
+         sta pointer    ;initialise the
+         sta pointer+$01;pointers and
+         sta nomovebull ;bullet status
+         sta gameover   ;disable
+                        ;game over
+
+         lda #$08
+         jsr $ffd2 ;disable shift+cbm
+
+         lda #<int ;this is where ¿e
+         ldx #>int ;initialise and
+         ldy #$00  ;we prepare to play
+         sta $0314 ;the irq request
+         stx $0315 ;flag, to run a
+         sty $d012 ;continuous loop
+         lda #$7f  ;to perform more
+         sta $dc0d ;tasks.
+         sta $dd0d ;
+         lda #$01  ;
+         sta $d019 ;
+         sta $d01a ;
+         lda #$00  ;
+         tax       ;
+         tay       ;
+         jsr $1000 ;
+         cli
+hold     jmp hold
+int      inc $d019 ;our main irq flag
+
+         lda gameover ;is game over? if
+         cmp #$01     ;so, end the game
+         beq endgame
+
+         jsr expand   ;call expand
+         jsr mvplayer ;call mvplayer
+         jsr bulletmv ;call bulletmv
+         jsr shipcol  ;call shipcol
+         jsr missile  ;call missile
+         jsr animate  ;call animate
+         jsr bullcol  ;call bullcol
+         jsr chkhit   ;call chkhit
+         jsr random   ;call random
+         jsr colroll  ;call colroll
+         jsr $1003    ;play music
+         jmp $ea31    ;irq loop
+endgame  jsr explplr  ;call explplr
+         jsr colroll  ;
+         jsr $1003    ;play music
+         jmp $ea31
+
+;expand sprite positions and put read
+;data from spritepos into the main
+;sprite position formats ($d000-$d00f)
+
+expand   ldx #$00
+xloop    lda spritepos+$01,x
+         sta $d001,x
+         lda spritepos+$00,x
+         asl a      ;x position is more
+         ror $d010  ;than 256 pixels
+         sta $d000,x
+         inx
+         inx
+         cpx #$10
+         bne xloop
+         rts
+
+;read the joystick in port 2 and move
+;the player around the screen. pressing
+;firebutton will make the player shoot
+;a rocket. you should already know how
+;the joystick control works. so no help
+;is really reqired here.
+
+mvplayer lda $dc00        ;read joystick
+up       lsr a            ;check up
+         bcs down         ;not up
+         ldy spritepos+$01;
+         dey              ;move player
+         dey              ;up, until it
+         cpy #$48         ;reaches #$48
+         bcs setup        ;then stop
+         ldy #$48         ;moving player
+setup    sty spritepos+$01
+down     lsr a            ;check down
+         bcs left         ;not down
+         ldy spritepos+$01;
+         iny              ;move player
+         iny              ;down until it
+         cpy #$ec         ;reaches #$ec
+         bcc setdown      ;then stop
+         ldy #$ec         ;moving player
+setdown  sty spritepos+$01
+left     lsr a            ;read left
+         bcs right        ;not left
+         ldy spritepos+$00
+         dey              ;as with up
+         cpy #$0c         ;and down, but
+         bcs setleft      ;moving left
+         ldy #$0c         ;
+setleft  sty spritepos+$00
+right    lsr a            ;read right
+         bcs fire         ;not right
+         ldy spritepos+$00
+         iny              ;as up and
+         cpy #$9e         ;down but
+         bcc setright     ;moving right
+         ldy #$9e
+setright sty spritepos+$00
+fire     lsr a            ;read fire
+         bcs nojoy        ;not fire
+         lda firelockup   ;
+         cmp #$01         ;check
+         beq nojoy        ;firelockup
+                          ;if not locked
+         lda spritepos+$00;place bullet
+         sta spritepos+$02;on ship and
+         lda spritepos+$01;fire bullet
+         sta spritepos+$03
+         lda #$01         ;lock fire
+         sta firelockup   ;until bullet
+                          ;finish its
+                          ;functional
+                          ;process
+nojoy    rts
+
+;the moving bullet
+
+;this routine (as you already seen
+;before) will check whether the bullet
+;is at its home position, or is moving
+;if the bullet is not moving then we
+;call moveit, else we just jump on to
+;nomovebl which ignores the bullet
+;moving process.
+
+bulletmv lda nomovebull
+         cmp #$01
+         beq nomovebl
+moveit   ldy spritepos+$03
+         dey
+         dey
+         dey
+         dey
+         dey
+         dey
+         dey
+         dey
+         cpy #$0b
+         bcs stopbull
+         ldy #$00
+         sty spritepos+$02
+         lda #$00
+         sta firelockup
+stopbull sty spritepos+$03
+         lda #$83
+         sta $07f9
+         rts
+nomovebl rts
+
+;check and perform the enemy to bullet
+;collision detection. if bullet smacks
+;the enemy, add points to the score.
+;you already seen this sort of routine
+;in our previous 2 player game tutorial
+;you will also notice that this routine
+;also works with control loops. where
+;we kill the enemies.
+
+bullcol  lda spritepos+$02
+         sec
+         sbc #$06
+         sta collision+$00
+         clc
+         adc #$0c
+         sta collision+$01
+         lda spritepos+$03
+         sec
+         sbc #$0c
+         sta collision+$02
+         clc
+         adc #$18
+         sta collision+$03
+
+;can you see what i mean. okay, this
+;process is doing exactly the same as
+;the player collision, but it works
+;the bullet. when an enemy hits the
+;player's bullet, it will die. else we
+;just ignore the process. we add a score
+;to any missile hit, and if 100 missiles
+;is shot. we increase the speed for the
+;next level - else ignore the process.
+
+         ldx #$00
+chkbcol  lda spritepos+$04,x
+         cmp collision+$00
+         bcc nohit
+         cmp collision+$01
+         bcs nohit
+         lda spritepos+$05,x
+         cmp collision+$02
+         bcc nohit
+         cmp collision+$03
+         bcs nohit
+         lda #$00
+         sta spritepos+$05,x
+         lda ranpos+$00
+         sta spritepos+$04,x
+
+         lda #$00    ;turn on bullet
+         sta destroy ;explosion
+
+;this is how we add points to the score
+;increment the character at screen ram
+;$040b (the last zero digit on screen)
+;by one, and then we call a loop, which
+;will use the previous five zero digits
+;to increment each number after reaching
+;the nearest digit (after reaching '9'
+;we increment each digit - and so on
+
+         inc $040b
+         ldx #$05
+score    lda $0406,x
+         cmp #$3a
+         bne setscore
+         lda #$30
+         sta $0406,x
+         inc $0405,x
+setscore dex
+         bne score
+
+;this is where we increment the amount
+;of missiles that have been shot. if
+;100 missiles have not been shot then
+;ignore the rest of the process. else
+;add 1 to levelct - which will increase
+;the playing speed. also increment the
+;character at $0427, which is the char
+;at the end of the screen.
+
+         inc missleft
+         lda missleft
+         cmp #$64
+         bne stoploop
+         lda #$00
+         sta missleft
+         inc $0427
+         inc levelct
+         lda levelct
+         cmp #$09
+         bne stoploop
+         lda #$01
+         sta levelct
+         lda #$31
+         sta $0427
+stoploop rts
+nohit
+         inx
+         inx
+         cpx #$0c
+         bne chkbcol
+         rts
+
+;since the bullet has hit the missile,
+;we need to check if the destroy
+;pointer is turned on, so that we can
+;show the explosion animation for the
+;enemy :)
+
+chkhit   lda destroy
+         cmp #$01
+         beq nodestroy
+         lda #$01
+         sta nomovebull
+exploop1 ldx pointer+$01
+         lda expltbl+$00,x
+         sta $07f9
+         inx
+         cpx #$12
+         beq reset2
+         inc pointer+$01
+         rts
+
+;reset the pointer and turn off the
+;explosion generator for the bullet
+
+reset2   ldx #$00
+         stx pointer+$01
+         ldx #$01
+         stx destroy
+         ldx #$00
+         stx firelockup
+         stx nomovebull
+         ldx #$0b
+         stx spritepos+$03
+         stx spritepos+$02
+nodestroy rts
+
+;missile to ship collision. if missile
+;hits the player, make the player lose
+;a shield from the ship and replace the
+;enemy missile
+
+shipcol  lda spritepos+$00 ;read player
+         sec               ;sprite and
+         sbc #$06          ;calculate
+         sta collision+$04 ;the position
+         clc
+         adc #$0c
+         sta collision+$05
+         lda spritepos+$01
+         sec
+         sbc #$0c
+         sta collision+$06
+         clc
+         adc #$18
+         sta collision+$07
+
+;this is where we read the collision
+;detection for the player ship. if the
+;player ship does not hit an enemy
+;(collision+$04 - collision+$07) then
+;this routine jumps to noshpcol, showing
+;that there is no collision detected
+;during the working process. however if
+;collision+$04 to collision+$05 is read
+;the missile is replaced at zero y-pos
+;and we stop the player bullet and
+;convert it into an explosion.
+
+         ldx #$00
+shipchk  lda spritepos+$04,x
+         cmp collision+$04
+         bcc noshpcol
+         cmp collision+$05
+         bcs noshpcol
+         lda spritepos+$05,x
+         cmp collision+$06
+         bcc noshpcol
+         cmp collision+$07
+         bcs noshpcol
+         lda #$00
+         sta spritepos+$05,x
+         lda ranpos+$00
+         sta spritepos+$04,x
+
+;decrement the player's shield. if the
+;player has lost all shields, switch on
+;game over (where we destroy the player
+;ship) to lock other functions.
+
+         dec $0419
+         lda $0419
+         cmp #$30
+         bne stopscol
+         lda #$01
+         sta gameover
+stopscol rts
+
+;nothing has hit the player ship
+
+noshpcol inx           ;where there is
+         inx           ;no collision
+         cpx #$0c
+         bne shipchk
+         rts
+
+;move those missiles.
+
+;in this routine, we call a loop, which
+;will move all the enemy missiles. we
+;use levelct to control the speed of
+;the missiles going down, and we use
+;zero (adc #$00) to control the x-speed
+;of the missiles. using #$00 does not
+;move the x-position.
+
+missile  ldx #$00
+falloop  lda spritepos+$04,x
+         clc
+         adc #$00  ;don't move x-pos
+         sta spritepos+$04,x
+         lda spritepos+$05,x
+         clc
+         adc levelct
+         sta spritepos+$05,x
+         inx
+         inx
+         cpx #$0c
+         bne falloop
+         rts
+
+;multi-purpose animator routine
+
+animate  ldx pointer
+animloop lda misstbl+$00,x
+         sta $07fa
+         sta $07fb
+         sta $07fc
+         sta $07fd
+         sta $07fe
+         sta $07ff
+         lda plrtble+$00,x
+         sta $07f8
+         inx
+         cpx #$18
+         beq reset
+         inc pointer
+         rts
+reset    ldx #$00
+         stx pointer
+         rts
+
+;a control loop to read the random
+;position table - to make the game more
+;interesting :)
+
+random   lda ranpos+$00
+         sta ranpos+$18
+         ldx #$00
+ranloop  lda ranpos+$01,x
+         sta ranpos+$00,x
+         inx
+         cpx #$18
+         bne ranloop
+         rts
+
+;game is over and the player is dead so
+;now we create our own explosion routine
+
+explplr  ldx pointer+$01
+eloop    lda expltbl+$00,x
+         sta $07f8
+         inx
+         cpx #$12
+         beq reset3
+         inc pointer+$01
+         rts
+reset3   ldx #$00
+         stx pointer+$01
+         jmp restart
+
+colroll  lda colours+$00
+         sta colours+$28
+         ldx #$00
+col1     lda colours+$01,x
+         sta colours+$00,x
+         lda colours+$00,x
+         sta $d800,x
+         inx
+         cpx #$28
+         bne col1
+         rts
+
+colours  .byte $06,$06,$02,$02,$04,$04
+         .byte $05,$05,$03,$03,$07,$07
+         .byte $01,$01,$07,$07,$03,$03
+         .byte $05,$05,$04,$04,$02,$02
+         .byte $06,$06,$06,$06,$06,$06
+         .byte $06,$06,$06,$06,$06,$06
+         .byte $06,$06,$06,$06,$06,$06
+         .byte $06,$06,$06,$06,$06,$06
+         .byte $06
+
+postable .byte $58,$e0,$00,$00,$0c,$30
+         .byte $32,$40,$5c,$50,$82,$60
+         .byte $45,$70,$75,$80
+
+plrtble
+         .byte $80,$80,$80,$80,$80,$80
+         .byte $81,$81,$81,$81,$81,$81
+         .byte $80,$80,$80,$80,$80,$80
+         .byte $81,$81,$81,$81,$81,$81
+         .byte $81
+
+misstbl  .byte $8a,$8a,$8a,$8b,$8b,$8b
+         .byte $8c,$8c,$8c,$8d,$8d,$8d
+         .byte $8e,$8e,$8e,$8f,$8f,$8f
+         .byte $90,$90,$90,$91,$91,$91
+         .byte $91
+
+expltbl  .byte $84,$84,$84,$85,$85,$85
+         .byte $86,$86,$86,$87,$87,$87
+         .byte $88,$88,$88,$89,$89,$89
+         .byte $91
+
+ranpos   .byte $58,$75,$0c,$45,$32,$82
+         .byte $5c,$7c,$15,$4c,$3c,$88
+         .byte $15,$4c,$85,$6c,$2c,$95
+         .byte $3c,$55,$7c,$45,$3c,$1c
+         .byte $91
+
+
+

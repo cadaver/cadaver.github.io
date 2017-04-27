@@ -1,0 +1,624 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+2-bit transfer protocol in diskdrive IRQ-loaders by Cadaver
+-----------------------------------------------------------
+
+This is a continuation of the previous IRQ-loader rant, that focused on a 1-bit
+transfer protocol. The loader discussed here is very much like the previous one,
+so only the changes in the protocol are explained in detail.
+
+2-bit transfer, as mentioned in the previous rant, requires good synchronization
+between the C64 and diskdrive. Once the transfer of a byte is fired up, the
+1541 sends 2 bits at a time on both the CLK & DATA lines of the serial bus
+without any waiting or handshaking.
+
+What gives problems is that synchronization between the C64 & diskdrive can't
+be cycle-exact; usually the diskdrive is waiting in a loop for the C64 to reply
+before firing up the strictly timed transfer, so the timing might be off as
+much as the length of this waiting loop.
+
+The other problem is that the diskdrive CPU runs at 1Mhz, but the C64 runs
+either slower (PAL) or faster (NTSC). This has to be taken into account also.
+In fact it seems that when the transfer routine is coded in a certain way, the
+difference between correct PAL & NTSC timing is only 1 clock cycle on the C64
+side; the disk drive code doesn't have to be adjusted at all.
+
+The drawbacks with this kind of 2-bit transfer are:
+- Interrupts will be disabled during the transfer of a byte, so any raster
+effects might be displaced.
+- Sprites are not allowed onscreen (would steal CPU cycles and mess with the
+timing.)
+- Hitting RESTORE while loading will cause an NMI interrupt and also mess the
+timing. There are two ways I can think of to handle this: Extend the transfer
+protocol to have a resend option (the NMI interrupt will set a resend flag) or
+disable NMIs by triggering a one-shot CIA2 interrupt but never acknowledging
+the NMI. None of these are in use in the loader, it will just load incorrectly
+if NMIs are occurring.
+
+I thank Marko Mäkelä for his C64-&gt;diskdrive asynchronous protocol, drive init
+code and original main drive loop, K.M/TABOO for inspiration on the badline
+detection and MuOn for testing the transfer routines on a real NTSC machine.
+The 2bit transfer code in this loader is coded by me but heavily inspired by
+various game loadersystems; for example Technocop.
+
+<a href="2bitload.zip">2-bit loader disk image and source</a>
+
+
+;COVERT BITOPS 2bit fastloader for Rant #9
+;Based on:
+;Marko Mäkelä's IRQ-loader
+;- Drive init code
+;- Drive main loop
+;- Asynchronous C64-&gt;drive communication
+;Technocop loader and other game loadersystems
+;- Drive-&gt;C64 2-bit communication
+;K.M/Taboo's 2bit loaders
+;- Badline detection
+
+status          = $90           ;Kernal zeropage variables
+messages        = $9d
+fa              = $ba
+
+bufferstatus    = $02
+stackptrstore   = $03
+
+ciout           = $ffa8         ;Kernal routines
+listen          = $ffb1
+second          = $ff93
+unlsn           = $ffae
+acptr           = $ffa5
+chkin           = $ffc6
+chkout          = $ffc9
+chrin           = $ffcf
+chrout          = $ffd2
+ciout           = $ffa8
+close           = $ffc3
+open            = $ffc0
+setmsg          = $ff90
+setnam          = $ffbd
+setlfs          = $ffba
+clrchn          = $ffcc
+getin           = $ffe4
+load            = $ffd5
+save            = $ffd8
+
+                processor 6502
+                org 2049
+
+;Example main program. Inits the fastloader and loads a file using it. After-
+;wards the drive can be used normally.
+
+sys:            dc.b $0b,$08           ;Address of next instruction
+                dc.b $0a,$00           ;Line number(10)
+                dc.b $9e               ;SYS-token
+                dc.b $32,$30,$36,$31   ;2061 as ASCII
+                dc.b $00
+                dc.b $00,$00           ;Instruction address 0 terminates
+                                       ;the basic program
+
+start:          jsr initfastload
+                jsr initmusicplayback   ;Now that we can play music while
+                ldx #"D"                ;loading, let's not forget it :-)
+                ldy #"A"
+                jsr fastload
+                jsr stopmusicplayback
+                rts
+
+initmusicplayback:
+                sei
+                lda #&lt;raster
+                sta $0314
+                lda #&gt;raster
+                sta $0315
+                lda #50                 ;Set low bits of raster
+                sta $d012               ;position
+                lda $d011
+                and #$7f                ;Set high bit of raster
+                sta $d011               ;position (0)
+                lda #$7f                ;Set timer interrupt off
+                sta $dc0d
+                lda #$01                ;Set raster interrupt on
+                sta $d01a
+                lda $dc0d               ;Acknowledge timer interrupt
+                lda #$00
+                jsr $1000
+                cli
+                rts
+
+stopmusicplayback:
+                sei
+                lda #&lt;$ea31
+                sta $0314
+                lda #&gt;$ea31
+                sta $0315
+                lda #$00
+                sta $d01a
+                lda #$81
+                sta $dc0d
+                inc $d019
+                lda #$00
+                sta $d418
+                cli
+                rts
+
+raster:         inc $d020
+                jsr $1003
+                dec $d020
+                dec $d019
+                jmp $ea31
+
+
+;INITFASTLOAD
+;
+;Uploads the fastloader to disk drive memory and starts it.
+;This routine is Marko Mäkelä's work, except for the 2-bit transfer
+;preparations.
+;
+;Parameters: -
+;Returns: -
+;Modifies: A,X,Y
+
+AMOUNT          = 32                    ;Bytes in one M-W command
+
+The fastloader initialization code starts with PAL/NTSC detection. I didn't
+want to rely on the value of $02a6 memory location so I implemented it with
+raster-line based detection. This code measures the highest rasterline number
+on the screen, and draws conclusions from that.
+
+initfastload:   sei
+                lda #$00
+il_detectntsc:  ldx $d011              ;Get the biggest rasterline in the
+                bmi il_detectntsc      ;area &gt;= 256 to detect NTSC/PAL
+il_detectntsc2: ldx $d011
+                bpl il_detectntsc2
+il_detectntsc3: cmp $d012
+                bcs il_detectntsc4
+                lda $d012
+il_detectntsc4: ldx $d011
+                bmi il_detectntsc3
+                cli
+                cmp #$20                ;PAL has 312 lines, but this check is
+                bcc il_isntsc           ;somewhere in the middle...
+
+For a PAL machine, the BPL instruction in the getbyte delay code (3 cycles,
+takes the branch) is replaced with a BMI instruction (2 cycles, doesn't take
+the branch)
+
+                lda #$30                ;Adjust 2-bit fastload transfer
+                sta fastload_delay      ;delay for PAL
+
+The rest of the initialization is like in the 1-bit loader.
+
+il_isntsc:      lda #&lt;drvprog           ;Initialize selfmodifying code
+                sta il_mwbyte+1
+                lda #&gt;drvprog
+                sta il_mwbyte+2
+                lda #&lt;drive
+                sta mwcmd+2
+                lda #&gt;drive
+                sta mwcmd+1
+il_mwloop:      jsr il_device           ;Set drive to listen
+                ldx #lmwcmd - 1
+il_sendmw:      lda mwcmd,x             ;Send M-W command
+                jsr ciout
+                dex
+                bpl il_sendmw
+                ldx #0
+il_mwbyte:      lda drvprog,x             ;Send AMOUNT bytes of drive
+                jsr ciout                 ;code
+                inx
+                cpx #AMOUNT
+                bne il_mwbyte
+                jsr unlsn               ;Unlisten starts the command
+                lda mwcmd+2
+                clc
+                adc #AMOUNT
+                sta mwcmd+2
+                bcc il_nohigh
+                inc mwcmd+1
+il_nohigh:      lda il_mwbyte+1
+                clc                     ;Move pointers
+                adc #AMOUNT
+                sta il_mwbyte+1
+                tax
+                bcc il_nohigh2
+                inc il_mwbyte+2
+il_nohigh2:     lda il_mwbyte+2
+                cpx #&lt;drvprogend
+                sbc #&gt;drvprogend
+                bcc il_mwloop
+
+                jsr il_device           ;Set drive to listen again
+                ldx #lmecmd - 1
+il_sendme:      lda mecmd,x             ;Send M-E command
+                jsr ciout
+                dex
+                bpl il_sendme
+                jmp unlsn               ;Unlisten starts the command
+
+il_device:      lda fa
+                jsr listen
+                lda #$6f
+                jmp second
+
+
+;FASTLOAD
+;
+;Loads a file with fastloader. INITFASTLOAD must have been called first.
+;Any normal KERNAL disk operations will cause the fastloader drive code to
+;exit (as ATN line goes low) and after that, INITFASTLOAD has to be called
+;again.
+;
+;Parameters: X: First letter of filename, Y: Second letter of filename
+;Returns: C=0 OK, C=1 error
+;Modifies: A,X,Y
+
+fastload:       stx filename
+                sty filename+1
+                sta $d07a               ;SCPU to slow mode
+                tsx                     ;Store stackpointer, needed when
+                stx stackptrstore       ;finishing loading
+                lda #$00                ;Reset buffer status
+                sta bufferstatus
+                ldx #$01                ;Byte counter.
+fastload_sendouter:
+                ldy #$08                ;Bit counter
+fastload_sendinner:
+                lsr filename,x          ;Rotate byte to be sent
+                lda $dd00
+                and #$ff-$30
+                ora #$10
+                bcc fastload_zerobit
+                eor #$30
+fastload_zerobit:
+                sta $dd00
+                lda #$c0                ;Wait for CLK & DATA low
+fastload_sendack:
+                bit $dd00
+                bne fastload_sendack
+                lda $dd00
+                and #$ff-$30            ;Set DATA and CLK high
+                sta $dd00
+fastload_waitack:
+                bit $dd00               ;Wait for CLK & DATA high
+                bvc fastload_waitack
+                bpl fastload_waitack
+                dey
+                bne fastload_sendinner
+                dex                     ;All bytes sent?
+                bpl fastload_sendouter
+
+Here something has changed. In this protocol the computer first asks for data
+by setting CLK=low; the drive responds with DATA=low to signal that data is 
+available. In idle state both CLK and DATA lines are high. So, there is no
+need for a pre-delay.
+
+                lda #$00                ;Initialize buffer counter
+                sta bufferstatus
+                jsr fastload_getbyte    ;Get file start address
+                sta fastload_sta+1
+                jsr fastload_getbyte
+                sta fastload_sta+2
+
+fastload_loop:  jsr fastload_getbyte    ;Then get bytes one by one. Getbyte
+fastload_sta:   sta $1000               ;routine exits when all have been
+                inc $d020               ;received
+                dec $d020
+                inc fastload_sta+1
+                bne fastload_loop
+                inc fastload_sta+2
+                jmp fastload_loop
+
+fastload_getbyte:
+                ldx bufferstatus                ;Bytes still in buffer?
+                beq fastload_fillbuffer
+                lda loadbuffer-1,x
+                dex
+                stx bufferstatus
+                rts
+fastload_fillbuffer:
+                jsr fastload_get        ;Get number of bytes to transfer
+                cmp #$01                ;$00 indicates successful end of load
+                bcc fastload_loadend    ;and $01 an error
+                beq fastload_loadend    ;Carry is set already (error sign)
+                sbc #$01                ;Carry is 1 here
+                sta bufferstatus        ;Store buffer length to bytecounter
+                ldx #$00
+fastload_gnbloop:
+                jsr fastload_get        ;Get the buffer byte by byte
+                sta loadbuffer,x
+                inx
+                cpx bufferstatus
+                bcc fastload_gnbloop
+                bcs fastload_getbyte
+fastload_loadend:
+                ldx stackptrstore       ;Restore stackpointer & exit loader
+                txs
+                sta $d07b               ;SCPU to fast mode
+                rts
+
+Here is the new getbyte routine for 2-bit transfer. It starts by pulling
+CLK low and waiting for disk drive to respond by pulling DATA low.
+
+fastload_get:   lda $dd00               ;CLK low
+                ora #$10
+                sta $dd00
+fastload_waitdrive:
+                bit $dd00               ;Wait for 1541 to signal data ready by
+                bmi fastload_waitdrive  ;setting DATA low
+                sei
+                
+Then, waiting for any badline to pass:
+
+fastload_waitbadline:
+                lda $d011
+                clc                     ;Wait until a badline won't distract
+                sbc $d012               ;the timing
+                and #$07
+                beq fastload_waitbadline
+                
+Now that we're certain, that a bad line won't disturb us for a while, we can
+begin the actual byte transfer. We let CLK high to signal the disk drive that
+we want to receive a byte. From here onwards timing is very important!
+
+                lda $dd00
+                and #$03
+                sta $dd00               ;Set CLK high
+                
+After CLK has been pulled low, there has to be 14 clock cycles delay for PAL
+and 15 cycles for NTSC (determined experimentally), before we start reading
+the data bits. At the end of this delay, we set CLK back high so that we can
+"see" what the disk drive is putting on the CLK line.
+
+fastload_delay: bpl fastload_delay2
+fastload_delay2:nop
+                nop
+                nop
+                nop
+                sta fastload_eor+1
+                
+And here comes the byte receiving, 2 bits at a time. The corresponding sending
+code on the disk drive side has the same amount of cycles, except...
+
+                lda $dd00
+                lsr
+                lsr
+                eor $dd00
+                lsr
+                lsr
+                eor $dd00
+                lsr
+                lsr
+                
+...for this EOR instruction. This is to ensure NTSC machines won't go ahead
+of the disk drive. On the other hand, the disk drive will soon set CLK & DATA
+back high, marking a return to idle state, so we can't be too slow either in
+grabbing the last bits. The EOR is necessary because the video bank bits are
+present in the lowest 2 bits of $dd00.
+
+fastload_eor:   eor #$00
+                eor $dd00
+                cli
+                rts
+
+;DRVPROG - Code executed in the disk drive.
+
+RETRIES         = 5             ;Amount of retries when reading a sector
+acsbf           = $01           ;Buffer 1 command
+trkbf           = $08           ;Buffer 1 track
+sctbf           = $09           ;Buffer 1 sector
+iddrv0          = $12           ;Disk drive ID
+id              = $16           ;Disk ID
+datbf           = $14           ;Temp variable
+buf             = $0400         ;Sector data buffer
+
+drvprog:                        ;Address in C64's memory
+                rorg $0500      ;Address in diskdrive's memory
+drive:          cli             ;Enable interrupts while waiting the first byte
+                jsr getbyte     ;(to allow motor to stop)
+                sta namecmp2+1
+                jsr getbyte
+                sta namecmp1+1
+
+Also, now the readsect subroutine takes the track & sector in X & Y registers,
+instead of them having to be stored on the zeropage by the caller.
+
+                ldx #18
+                ldy #1	        ;Read disk directory
+dirloop:        jsr readsect    ;Read sector
+                bcc error       ;If failed, return error code
+                ldy #$02
+nextfile:       lda buf,y       ;File type must be PRG
+                and #$83
+                cmp #$82
+                bne notfound
+                lda buf+3,y     ;Check first letter
+namecmp1:       cmp #$00
+                bne notfound
+                lda buf+4,y     ;Check second letter
+namecmp2:       cmp #$00
+                beq found
+notfound:       tya
+                clc
+                adc #$20
+                tay
+                bcc nextfile
+                ldy buf+1       ;Go to next directory block, go on until no
+                ldx buf	        ;more directory blocks
+                bne dirloop
+error:          ldx #$01        ;Send $01 - error in loading file
+loadend:        txa
+                jsr sendbyte
+                jmp drive       ;Go back to wait for the filename
+
+found:          iny
+nextsect:       ldx buf,y       ;File found, get starting track & sector
+                beq loadend     ;If at file's end, send byte $00
+                lda buf+1,y
+                tay
+                jsr readsect    ;Read the data sector
+                bcc error
+                ldy #$ff        ;Amount of bytes to send - assume $ff
+                lda buf
+                bne sendblk
+                ldy buf+1       ;Possibly less if it's the last block
+sendblk:        tya
+sendloop:       jsr sendbyte    ;Send the amount of bytes that will be sent
+                lda buf,y       ;Send the sector data in reverse order
+                dey
+                bne sendloop
+                beq nextsect
+
+readsect:       stx trkbf
+                sty sctbf
+                ldy #RETRIES    ;Retry counter
+                jsr success     ;Turn on led
+retry:          lda #$80
+                sta acsbf       ;Command:read sector
+
+Here is the key to getting good loading speeds. Interrupts must only be enabled
+when the command is already waiting in the command register (an interrupt has
+probably been pending while we've been sending the last sector and now it will
+be executed right after the CLI instruction, so sector reading commences as
+fast as it can.)
+
+                cli
+poll1:          lda acsbf       ;Wait until ready
+                bmi poll1
+                sei
+                cmp #1
+                beq success     ;Also sets carry flag to 1
+                lda id	        ;Check for disk ID change
+                sta iddrv0
+                lda id+1
+                sta iddrv0+1
+                dey             ;Decrease retry counter
+                bne retry
+failure:        clc
+success:        lda $1c00
+                eor #$08
+                sta $1c00
+                rts
+
+And here's the disk drive side of the 2-bit transfer routine. It relies on a
+table to convert 4 bits at a time to the CLK & DATA signals (a byte can be
+shifted left to get the second bit pair of a nybble)
+
+sendbyte:       sta datbf
+                lsr
+                lsr
+                lsr
+                lsr
+                
+                lda #$04
+sendwait:       bit $1800               ;Wait for CLK==low
+                beq sendwait
+                
+The DATA=low must not be set until the disk drive really is ready to send a
+byte, because the C64 will not wait after that.
+
+                lsr                     ;Set DATA=low
+                sta $1800
+                lda sendtbl,x           ;Get the CLK,DATA pairs for low nybble
+                pha
+                lda datbf
+                and #$0f
+                tax
+                lda #$04
+                
+Here, wait for CLK to go high.
+
+sendwait2:      bit $1800               ;Wait for CLK==high (start of high speed transfer)
+                bne sendwait2
+                lda sendtbl,x           ;Get the CLK,DATA pairs for high nybble
+                
+And start the bit-pair sending. 8 clock cycles per pair, just like on the C64
+side.
+
+                sta $1800
+                asl
+                and #$0f
+                sta $1800
+                pla
+                sta $1800
+                asl
+                and #$0f
+                sta $1800
+                
+Then, after some delay, set the CLK & DATA lines back to high state.
+
+                nop
+                nop
+                lda #$00                ;CLK=DATA=high
+                sta $1800
+                rts
+
+sendtbl:        dc.b $0f,$07,$0d,$05
+                dc.b $0b,$03,$09,$01
+                dc.b $0e,$06,$0c,$04
+                dc.b $0a,$02,$08,$00
+
+getbyte:        ldy #$08                ;Counter: receive 8 bits
+recvbit:        lda #$85
+                and $1800               ;Wait for CLK==low || DATA==low
+                bmi gotatn              ;Quit if ATN
+                beq recvbit
+                lsr                     ;Read the data bit
+                lda #2                  ;Prepare for CLK=high, DATA=low
+                bcc rskip
+                lda #8                  ;Prepare for CLK=low, DATA=high
+rskip:          sta $1800               ;Acknowledge the bit received
+                ror datbf               ;and store it
+rwait:          lda $1800               ;Wait for CLK==high || DATA==high
+                and #5
+                eor #5
+                beq rwait
+                lda #0
+                sta $1800               ;Set CLK=DATA=high
+                dey
+                bne recvbit             ;Loop until all bits have been received
+                lda datbf               ;Return the data to A
+                rts
+gotatn:         pla                     ;If ATN goes low, exit to the operating
+                pla                     ;system. Just discard the return address.
+                rts
+
+                rend
+
+drvprogend:
+
+mwcmd:          dc.b AMOUNT,&gt;drive,&lt;drive,"W-M"
+lmwcmd          = . - mwcmd
+
+mecmd:          dc.b &gt;drive,&lt;drive,"E-M"
+lmecmd          = . - mecmd
+
+Filename buffer, sector buffer and music data.
+
+filename:       dc.b 0,0
+loadbuffer:     dc.b 254,0
+
+                org $1000
+
+                incbin music.bin
+
+
+With the standard sector interleave of 10, this loader achieves about 5x
+loading speed compared to the KERNAL routines. Going below that interleave
+results in a drop in loading speed as the disk has to spin one more round. The
+next step for more speed is rewriting the sector read routine at least
+partially, but that is totally outside my knowledge.
+
+So, the end of this rant has been reached. Remember to do RESTORE protection in
+actual production code!
+
+
+                                                  Lasse Öörni
+                                                  <a href="mailto:loorni@gmail.com">loorni@gmail.com</a>
+</pre>
+</body>
+</html>

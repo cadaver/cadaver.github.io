@@ -1,0 +1,107 @@
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Sprite caching by Cadaver
+-------------------------
+
+0. Introduction
+
+In the <a href="mw4trick.htm">MW4 tricks & techniques rant</a> I've talked about realtime depacked sprites
+for fitting more sprite animations in the C64's memory. In the current packed
+sprite system I use, a sprite is split into 3x3 slices, each one byte wide and
+7 bytes high, and then only the slices which actually contain data are stored,
+in addition to a bitmask which tells which slices are occupied. When a sprite
+frame needs to be shown, it is depacked into the video bank. To avoid glitches,
+a double buffer needs to be allocated for each sprite, so if the multiplexer 
+can show eg. 24 sprites maximum, 48 sprites need to be reserved from the video 
+memory.
+
+(Note that MW4 used a cut-down version of the depacking for small sprites only,
+reducing the slices to 3x2, and skipping double buffering on the assumption that
+sprite depacking finishes before the sprites are actually displayed.)
+
+Implemented naively, this leads into a CPU use hit every time some sprite
+changes its animation frame, which may easily lead to the game slowing down.
+Furthermore, if several sprites (for example explosions) animate in unison,
+there is wasted work being done unpacking the same sprite frame for each of
+them. While developing Hessian I wanted to reduce the CPU hit (to allow for
+all sprites to be packed while maintaining 50Hz), which led into a caching
+approach.
+
+
+1. Caching mechanism
+
+Instead of treating each sprite to be shown individually, we want to ask the 
+question "is this sprite frame available yet, or does it need to be depacked?"
+Also, we may want to allocate more room than 2 x maximum sprites from the video
+bank, to allow repeating animations to remain in the cache.
+
+To be efficient, this requires a two-way mapping. Each packed sprite animation
+frame needs to store the knowledge of the cache frame it exists in (or that
+it doesn't exist yet), and for erasing the old cache mappings, the unpacked
+sprites in the cache need to store which packed frame they refer to.
+
+For each cached sprite an "age" needs to be maintained, for discarding the
+oldest cached sprites, and to make sure we never overwrite a sprite that is
+currently being shown.
+
+
+2. Implementation in Hessian
+
+Hessian uses a system where sprites are referred to by a sprite file number,
+and a frame number inside the file. It also realtime-flips sprite data to save
+roughly half of the memory, but that will not be discussed here. The sprite
+cache is 64 frames large, and sits underneath the I/O memory, $d000-$dfff, so 
+that the sprite depacking routines are the only ones which need to touch the $01
+register. Raster interrupts naturally need to switch I/O memory back on during 
+their execution.
+
+The packed sprite data includes a header which contains the slice bitmask,
+hotspot information, and color. One more byte was added to the header to
+represent the cache frame, or $00 to denote "not cached yet." When sprite
+flipping was implemented, it actually became two bytes, cache frame for facing
+left, and cache frame for facing right.
+
+When a sprite needs to be displayed, the cache frame byte is read. If nonzero,
+nothing further needs to be done, except resetting the cached sprite's age.
+
+If the sprite is not cached yet, we start the search algorithm for determining
+a slot in the cache which we can overwrite. This is a simple round-and-round
+search which continues from the last cache slot that was written to, and 
+furthermore the age system is not terribly intelligent, as it actually counts
+only 2 frames: that the sprite is shown on screen right now, or will be shown
+after this frame completes. In both cases the cache slot can not be reused, but
+if it's older, it can.
+
+When a suitable slot is found, we check the sprite file number and sprite frame
+number for the slot, and use those to remove the cache mapping from the old
+packed sprite's header (if any.)
+
+Next, the sprite data is actually unpacked, and finally both mappings are
+updated: the cache framenumber in the sprite header, and the sprite file, frame
+number and age reset for the cached sprite.
+
+To summarize, here's the data structures the caching needs:
+
+Each packed sprite header:
+
+Bitmask + color (2 bytes)
+Hotspot and multisprite connection info (6 bytes, both left & right)
+Cache framenumber (2 bytes, left & right)
+
+For the cached sprites:
+
+cacheSpriteFile: 64 bytes
+cacheSpriteFrame: 64 bytes
+cacheSpriteAge: 64 bytes
+
+To see the implementation, see <a href="https://github.com/cadaver/hessian/blob/master/sprite.s" target="_top">sprite.s</a> in the Hessian source code. Note that
+the code is optimized and therefore rather learning-unfriendly. The cached
+sprite age uses an absolute framenumber system, which is maintained as part of 
+the DrawActors routine in another file, <a href="https://github.com/cadaver/hessian/blob/master/actor.s" target="_top">actor.s</a>.
+</pre>
+</body>
+</html>
