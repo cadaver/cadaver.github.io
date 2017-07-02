@@ -21,6 +21,39 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>2th July 2017:</b>
+<br><br>
+There's a bit of time since the last work-in-progress update, but the 1st pass on the game world took this long. Now, however, it's done!<br><br>
+
+At the time of writing this, the game world consists of 661 screens spread over 17 "levels." There were 14 charsets originally, but one (a slightly boring tunnel / sewer set) got dropped out without much loss,
+so the total number is 13 now.<br><br>
+
+While working on the game world, the loading and data compression system for it also needed work, and a few different versions were tested. Originally, the world editor just packed each room / area ("zone" in internal terminology)
+the player can enter separately with Exomizer. This was good for compressing each individual area efficiently, but the compressor could not take advantage of repeating patterns across different areas of the same level. This
+led to rather significant wasted disk space.<br><br>
+
+The final data storage mechanism consists of running each area first through a simple custom-written RLE algorithm. The purpose of the RLE compression is to reduce the amount of memory the level takes during runtime, and to allow
+more of the last visited levels to be cached in memory to reduce repeated loading, if there's enough memory free. The RLE format is also written so that it should compress well with Exomizer (it uses the otherwise unused block number 255 to mark RLE runs.) Then,
+to get the final data to be stored on disk, the concatenated RLE area datas of the level are run through Exomizer in one go. One final advantage of the RLE format is that it's faster to decompress than Exomizer data, so area changes are very fast now when the level
+and charset are already in memory.<br><br>
+
+Originally, the hope was for free blocks count to be no less than 300 when the world would be done, but the world got a bit larger than planned, so the disk image is at 285 blocks free currently. What still needs to fit inside is
+all the enemies + their code, characters, story scripts, music and intro / end sequences, we'll see if there will be need to compress further or drop something out.<br><br>
+
+The next step will be to start working on the enemies to actually bring the challenge in! In the meanwhile, here's some screens from the 1st pass:<br><br>
+<center>
+<img src="wip/ingame_mapfirstpass0.gif" alt="Planet surface / exiting the military ship"><br><br>
+<img src="wip/ingame_mapfirstpass1.gif" alt="Machine city"><br><br>
+<img src="wip/ingame_mapfirstpass2.gif" alt="Processing plant"><br><br>
+<img src="wip/ingame_mapfirstpass3.gif" alt="Mining facility"><br><br>
+<img src="wip/ingame_mapfirstpass4.gif" alt="Deep caves"><br><br>
+<img src="wip/ingame_mapfirstpass5.gif" alt="Power plant"><br><br>
+<img src="wip/ingame_mapfirstpass6.gif" alt="Weapons factory"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>6th April 2017:</b>
 <br><br>
 The one-and-a-half month "coding break" after finishing the charsets has concluded, and it's time to begin creating the final game world layout!<br><br>
