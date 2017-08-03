@@ -21,6 +21,34 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>3rd August 2017:</b>
+<br><br>
+Enemy design and game world population is progressing; roughly one third of the world is populated now (optimistically speaking) and a little less than a half of the regular enemies are done. Boss encounters will be saved for later.<br><br>
+
+In addition, several other parts were already worked on too: the title screen, game start including player character customization, ingame menu including map/status/load/save, and upgrade + ammo + recharger stations in the game world. 
+Like in Hessian, defeated robotic enemies drop parts, which can be spent at the stations. The presence of enemies makes the game already very much playable; the difficulty they pose just needs to be tuned later. Armor power (= health)
+recharges to a degree so that progressing should never be impossible even if you get into a bad situation, but collected power-ups or recharger stations are needed to fill the power to the maximum again.<br><br>
+
+Title music and first 3 ingame tunes have also been composed.<br><br>
+
+In the process, bugs were also uncovered and fixed, some of them a bit nasty, like corruption / crashes when the dynamic allocation memory area is full enough, or fastloader timing bugs related to the fast-save, and sprites. And some funnier, like
+the player gaining total immunity from damage if crossing to a new room while in wheel form.<br><br>
+
+Disk side free blocks count is at 227 now; being cautiously optimistic it could be enough to finish the game without having to sacrifice anything major. In particular music is somewhat minimalistic (but still sets the proper combat atmosphere) 
+and doesn't take much diskspace.<br><br>
+
+One nice thing to do was to also update the diskimage creation utility, so that the files to write, and their order on the physical disk tracks, can be separately specified in the same "sequence" file. In addition, comments can be present in the
+sequence file to mentally help with grouping the needed files for each part of the game. In an ideal situation the world data, charset, music and enemy sprites & code needed by a particular location could all be written sequentially to the disk
+to minimize seek times. In practice several locations might use the same enemies, code or music, so the order will never be completely optimal.<br><br>
+
+Here's how the current title screen and main menu looks like:<br><br>
+<center>
+<img src="wip/titlescreen.gif" alt="Title screen"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>2th July 2017:</b>
 <br><br>
 There's a bit of time since the last work-in-progress update, but the 1st pass on the game world took this long. Now, however, it's done!<br><br>
