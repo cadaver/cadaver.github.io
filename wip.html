@@ -21,6 +21,45 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>4th September 2017:</b>
+<br><br>
+Non-boss enemies completed! There are about 35 different types, which is slightly more than in Hessian. The largest of them use 5 sprites, while bosses should certainly use more.<br><br>
+
+Implementing the enemies revealed some weaknesses in the engine. They weren't critical but were still good to correct.<br><br>
+
+First, originally the game used different "actor types" for the same enemy having a different weapon, as the world data
+doesn't store a "weapon number" separately for each placed enemy, like MW4 / Hessian do. This caused a lot more actor
+types being reserved than the actual number of different enemies. Each actor type takes 4 bytes of resident engine data for the display & logic
+data pointers so it's not insignificant. Furthermore there is a limit of max. 128 actor types for the whole game.<br><br>
+
+This was solved by the concept of "weapon sets", which means weapon assignment per enemy type. This can be chosen per room / area,
+using the high nybble of one of the area background colors, so no extra data bytes were needed. There can be a max. of 16 weapon sets,
+and the first (set 0) is the default which will always be applied first. If the enemy always uses the same weapon everywhere, it needs
+only to be mentioned there. <br><br>
+
+Second, all the actor display (sprite frames) and logic (update routine address, hitpoints, score awarded from destruction, speed and firing 
+parameters etc.) definitions were initially resident in the main engine file. This was over 1.5 KB of data which ate into the dynamic allocation area.
+The definitions are not needed when an actor does not appear in a level, so the logical solution was to move these too
+alongside the loadable code which actually implements the actor update. This slows down and complicates accessing the actor definitions
+just a bit, but was well worth it. Definitions for the "always needed" actors like player and bullets and explosions are still part of the
+main engine file, and accessing them is faster.<br><br>
+
+In the beginning of August, all music except bossfight songs got composed too, so that front is looking good as well.<br><br>
+
+Next steps: populating the rest of the game world, creating the boss enemies and composing bossfight songs. If this completes within September,
+then the game is well on its way. In that case October would be the story & NPC implementation month, just in time before NaNoWriMo 2017!<br><br>
+
+Free diskspace is sitting at 145 blocks. Considering that Steel Ranger won't be as text-heavy as Hessian, it doesn't seem critical;
+however we'll know better once the boss enemies are in too.<br><br>
+<center>
+<img src="wip/ingame10.gif" alt="Large drill robot chasing the player"><br><br>
+</center>
+</p>
+<br><br><br>
+
+
+
+<p align="justify">
 <b>3rd August 2017:</b>
 <br><br>
 Enemy design and game world population is progressing; roughly one third of the world is populated now (optimistically speaking) and a little less than a half of the regular enemies are done. Boss encounters will be saved for later.<br><br>
