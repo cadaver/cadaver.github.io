@@ -21,6 +21,42 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>22nd September 2017:</b>
+<br><br>
+Initial pass of filling the game world with enemies and items was completed roughly one week ago, and initial test runs (with combat) 
+through the whole became possible. But before starting the boss enemy work, some adjustments and optimizations were in order.<br><br>
+
+Since many of the enemies actively chase the player, using an unlimited health cheat and just running through the enemy hordes would create a
+situation where all visible enemies would latch onto the player, leading to CPU & sprite multiplexer overload. Therefore now the enemies keep
+track of whether they are the strongest (most hitpoints) chasing the player, and give up if they are not among the top 3. Many enemies also run a 
+routine each frame to see whether they can fire into a direction that has a chance of hitting the player. This could be optimized, resulting in 
+a nice CPU time gain per each enemy onscreen. Calling each actor's frame update routine also received a speedup by eliminating some no-longer-needed code.<br><br>
+
+In some levels, the dynamic memory allocation area would fill completely because several enemies' sprites and code reside in each loadable file, and also
+some unused enemies would get loaded. It would be too wasteful of disk allocation units to store only one enemy per file. Therefore, these needed some minor
+reorganization.<br><br>
+
+The game world got a few minor edits and added shortcuts. Also, during the world population phase, an extra level got in! Its purpose is
+just to be very hard and optional, containing a large amount of parts for upgrade and ammo purchases.<br><br>
+
+The game engine was missing still a few features that will be necessary later. Now each level can run their own "player enters a room" code,
+which can install for example a per-frame routine for further special events. Also, the familiar story state bit system ("plotbits") from MW4 &
+Hessian got into Steel Ranger too.<br><br>
+
+Finally, the "nature" levels, where just various creature enemies attack the player, got a little more interesting simply by making the
+stationary enemies like spike launchers be able to hurt the moving creatures! By timing the movement right, players can now utilize them
+as weapons, and conserve ammo that way.<br><br>
+
+Now the boss enemy work can start for real! Diskspace is at 114 blocks free, and here's some shots with enemies:<br><br>
+<center>
+<img src="wip/ingame_enemies1.gif" alt="Machine city bridge enemies"><br><br>
+<img src="wip/ingame_enemies2.gif" alt="Mine enemies"><br><br>
+<img src="wip/ingame_enemies3.gif" alt="Multipart worm inside cave"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>4th September 2017:</b>
 <br><br>
 Non-boss enemies completed! There are about 35 different types, which is slightly more than in Hessian. The largest of them use 5 sprites, while bosses should certainly use more.<br><br>
@@ -64,7 +100,7 @@ however we'll know better once the boss enemies are in too.<br><br>
 <br><br>
 Enemy design and game world population is progressing; roughly one third of the world is populated now (optimistically speaking) and a little less than a half of the regular enemies are done. Boss encounters will be saved for later.<br><br>
 
-In addition, several other parts were already worked on too: the title screen, game start including player character customization, ingame menu including map/status/load/save, and upgrade + ammo + recharger stations in the game world. 
+In addition, several other parts were already worked on too: the title screen, game start including player character customization, ingame menu including map/status/load/save, and upgrade + ammo + recharger stations in the game world.
 Like in Hessian, defeated robotic enemies drop parts, which can be spent at the stations. The presence of enemies makes the game already very much playable; the difficulty they pose just needs to be tuned later. Armor power (= health)
 recharges to a degree so that progressing should never be impossible even if you get into a bad situation, but collected power-ups or recharger stations are needed to fill the power to the maximum again.<br><br>
 
