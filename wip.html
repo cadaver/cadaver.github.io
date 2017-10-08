@@ -21,15 +21,47 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>8th October 2017:</b>
+<br><br>
+Boss enemies are all done! There are 8 boss fights in the game in total, including optional ones. Each of them also 
+has their own unique music, and these have been composed, so the game soundtrack is complete too, consisting of
+26 songs in total. The uncompressed music data takes about 20 kilobytes, which goes down to 13 KB when compressed.<br><br>
+
+Boss fights are quite a bit of fun to create and test, as they should be challenging, yet survivable once you
+learn the pattern or get into the rhythm. Furthermore, they should not be able to be completed via a simple exploit, for example standing
+in some place where the boss can't do damage at all! However, coding them often results in hacky code, containing
+hardcoded values for example for the boss enemy's movement boundaries. So it's kind of "write once and forget" code
+which isn't very satisfying in a professional sense.<br><br>
+
+Some of the fights stress the sprite multiplexer and CPU time, which resulted in minor slowdowns, particularly in fights
+where the player can turn to retreat in a scrolling room. When turning, the screen scrolls faster than normal to
+show more of the world in the player's facing direction, and this results in more CPU time taken. Some code speed optimizations
+were in order. For example: a "bomb" thrown by the boss enemy originally checked collisions against the whole damageable
+actor list, like ordinary bullets do. However, in this case it's faster (and just as correct) to check just against the player actor.<br><br>
+
+Next begins the final leg of implementation, which means: texts + story events + friendly NPCs + intro + endings.
+Diskspace remaining for that is at the moment 64 blocks, or a little less than 16 kilobytes! To fit everything in might require
+some luck or creativity, it's interesting to see how it will go. The story potentially requires one more charset +
+small level to be included, but it shouldn't take much space.<br><br>
+
+In the meanwhile, screenshots of the first bosses:<br><br>
+<center>
+<img src="wip/droidboss.gif" alt="Large droid"><br><br>
+<img src="wip/fighterboss.gif" alt="VTOL fighters"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>22nd September 2017:</b>
 <br><br>
-Initial pass of filling the game world with enemies and items was completed roughly one week ago, and initial test runs (with combat) 
+Initial pass of filling the game world with enemies and items was completed roughly one week ago, and initial test runs (with combat)
 through the whole became possible. But before starting the boss enemy work, some adjustments and optimizations were in order.<br><br>
 
 Since many of the enemies actively chase the player, using an unlimited health cheat and just running through the enemy hordes would create a
 situation where all visible enemies would latch onto the player, leading to CPU & sprite multiplexer overload. Therefore now the enemies keep
-track of whether they are the strongest (most hitpoints) chasing the player, and give up if they are not among the top 3. Many enemies also run a 
-routine each frame to see whether they can fire into a direction that has a chance of hitting the player. This could be optimized, resulting in 
+track of whether they are the strongest (most hitpoints) chasing the player, and give up if they are not among the top 3. Many enemies also run a
+routine each frame to see whether they can fire into a direction that has a chance of hitting the player. This could be optimized, resulting in
 a nice CPU time gain per each enemy onscreen. Calling each actor's frame update routine also received a speedup by eliminating some no-longer-needed code.<br><br>
 
 In some levels, the dynamic memory allocation area would fill completely because several enemies' sprites and code reside in each loadable file, and also
