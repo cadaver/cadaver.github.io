@@ -21,6 +21,37 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>9th November 2017:</b>
+<br><br>
+Steel Ranger has reached content complete status roughly as planned, with the story implementation / scripting taking most of October,
+and when November started, also the endings found their way in finally. It's now being tested, internally at first to make sure
+nothing blows up!<br><br>
+
+The game will be published by <a href="http://www.psytronik.net" target="_top">Psytronik</a> at a date that will be announced later; it's recommend
+to watch their website as the release page should also go up there in the near future!<br><br>
+
+After finishing the endings, several bugs were found almost immediately, though they weren't anything complex to fix. E.g. an enemy
+was left hanging in the midair due to level background changes without matching enemy repositioning, and some wrong messages were being
+displayed at the ammo & upgrade terminals. Bugs that require engine changes are trickier, since the engine contains some page-aligned data
+(sprite flipping tables) and now the engine code end is sitting almost exactly on a page boundary, meaning that if a bugfix requires the
+engine code to grow, other code should be size-optimized!<br><br>
+
+Overall, the Steel Ranger engine does its job well, and I'm satisfied with it (it's a few kilobytes smaller than Hessian's resident code + data)
+but in retrospect it was not a good idea to leave the story related code last, e.g. support code for NPC conversations. It ended up a bit
+uglier than the corresponding code in Hessian, though arguably also more powerful, as scripting sequences where characters alternate between
+moving and talking ended up being straightforward to implement.<br><br>
+
+Disk side space is sitting at 2 blocks free, by using slightly illegal means of also using the directory track for file data.
+The final publisher + end credits are likely to take the remaining free space.<br><br>
+
+You can watch the character creation, intro sequence & beginning gameplay on <a href="https://www.youtube.com/watch?v=dKOxtenyGtA" target="_top">YouTube</a>.<br><br>
+<center>
+<img src="wip/ingame_intro3.gif" alt="Intro beginning"><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>8th October 2017:</b>
 <br><br>
 Boss enemies are all done! There are 8 boss fights in the game in total, including optional ones. Each of them also 
