@@ -21,6 +21,113 @@ Steel Ranger - work in progress
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>13th December 2017:</b>
+<br><br>
+One more WIP update for Steel Ranger! This one is long, so brace yourself...<br><br>
+
+Getting the game content in initially complete state was by no means the end. There's always more work in testing, debugging, introducing new bugs and
+re-fixing them than one might imagine!<br><br>
+
+The game has by now been examined by six testers. Apart from some loading problems in the beginning, they didn't see hard crashes; these were rare
+in internal testing too. In that regard Steel Ranger's code appears "friendly", meaning that the basic code paths like moving, shooting,
+receiving damage & destroying actors get exercised often and completely, and can't therefore likely contain hidden bugs.<br><br>
+
+An issue several of the testers mentioned is that sometimes the game loads in the middle of an area, although the data precaching mechanism tries
+to eliminate this the best it can. At this point sprites are hidden to speed up loading, and to not require potentially risky waiting for a
+sprite-free raster position due to the timed 2-bit fastloader protocol being used. So, if you encounter this, no need to worry, the game hasn't
+crashed or locked up :)<br><br>
+
+Compared to Hessian, Steel Ranger's whole story is much easier to test. Almost all enemy encounters and plot elements are self-contained and can
+be tested separately. Hessian had long alternative / branching "story arcs" that needed several playthroughs to test completely.<br><br>
+
+One somewhat hairy issue (similar to Hessian) is that the game continues to run while NPCs communicate with the player, with player controls
+disabled. In rare cases there might be enemies on the screen as well, though the story tries its best to prevent this, by e.g. delaying radio
+communications. To absolutely prevent the player from dying during NPC dialogue, player damage is turned off, and
+the game also makes the enemies not hunt the player actively, to make it not so apparent.<br><br>
+
+But it turned out the game wasn't actually content complete when initially thought to be...<br><br>
+
+Adding the proper end credits quickly reduced the available disk space to 0 blocks free, as expected. However, the tone of the game's complete ending
+left a bit to be desired. It wasn't feeling victorious enough, and dialogue between the NPCs was lacking. So, it was time to start figuring out ways to compress the ending code better so that a few more lines of dialogue could be included. Sometimes
+this needed to go to rather esoteric lengths, e.g. reordering code or writing it a bit differently in hope that it results in a shorter Exomizer
+compressed data stream!<br><br>
+
+Compressing just the ending code was not going to cut it, as it stubbornly remained too large. A critical victory was getting one of the enemy sprite 
+files (containing a stationary turret) to compress better: it was sitting slightly over the disk block 254 byte limit. The solution was ugly in an 
+artistic sense: let the shading of the turret's rotating part become incorrect as it flips from right to left. This made the sprites compress so 
+that they would fit inside the previous multiple of 254 bytes, freeing one block, and making it possible to get the improved ending in.<br><br>
+
+After this change, there was a hunger for more :) Doing a full playthrough requires performing an optional task, but the NPCs were not commenting on
+it, rather just staying silent as if nothing had happened. Improving this needed two things: to compress the story script code related to the task
+enough, so that setup code for making the NPCs react accordingly could be added without making it grow one block larger. Then, figure out a story
+script code file where to put the actual additional dialogue in, again without making it spill over to the next block.<br><br>
+
+Finally, free space was found from a script code file used earlier in the story. This means that by examining memory at the game's beginning, you
+can actually spoil some end-game dialogue, but that's the price the game has to pay for getting to include the additional story elements at all!<br><br>
+
+The tale of the improved ending / story does not quite end here.<br><br>
+
+The optional task code also deals with the player entering an area too early, and giving damage in that case. This effect activates or deactivates through entry / exit triggers placed in the world map. Mostly by luck, a rather serious bug
+related to this was uncovered: if the player exited the area, then saved, then re-entered, the damage effect would stay on! This was because of the
+exit trigger remaining "stuck" and not triggering again. Normally this would not have happened, but the game disables saving when the player is in serious
+danger that could make the game uncontinuable, and saves manually (instead of automatic save on each room / area transition) once the danger is over.
+The manual save caused the trigger to stay stuck.<br><br>
+
+Another fix, another code shortening. The game builds again... Except the player no longer receives the damage! The environmental damage only executes
+on each odd-numbered frame to give a nice rhythm to the damage flashing & sound effect, but in this case it would be called more infrequently.
+The last code optimization had caused the damage to be attempted on even-numbered frames instead, disabling it completely!<br><br>
+
+One last fix and optimization, which was extremely ugly: the damage timer value would also be used as an ID for a text resource that needs to be printed, to
+not need an additional instruction which would make the code too large. The lesson to be learned here: when code is relying on conditions that are not
+immediately obvious (the odd/even frame thing), document these conditions very clearly to not cause confusion later! And preferably, avoid the need
+for such extreme late-stage optimizations.<br><br>
+
+A similar bug appeared with one of the bosses. It had code to prevent killing itself with explosives after the player is dead, but this code no longer
+worked after the boss movement speed table had been reorganized. Again, a note warning against modification would have been necessary!<br><br>
+
+After these issues, the other tweaks and bugfixes were more straightforward, like editing some bad-looking parts in the game world, fixing places
+where the player could get stuck on foot (needing the wheel mode to get out) and tweaking some of the boss health values slightly higher to make sure
+the battles don't complete too fast with upgraded weapons.<br><br>
+
+Finally, some traditional postmortem analysis for the whole project.<br><br>
+
+Things that went right:<br>
+
+<ul>
+<li>Inspiring story & scenario that did not need to change, and also informed the gameplay design</li>
+<li>2x2 char blocks sped up physics / collision code and gave better resolution for world design</li>
+<li>World editor tool that sped up & reduced the pain of creating the game world</li>
+<li>Simpler controls compared to earlier games</li>
+<li>All enemies are placed in world editor, so situations can be designed better and player isn't overwhelmed with constant enemy spawn</li>
+<li>Boss fights that ended up all different yet challenging, and mostly exploit-free</li>
+</ul>
+
+Things that could have been improved:<br>
+
+<ul>
+<li>2x2 char blocks used much disk space just for the game world; the double-compression RLE scheme was absolutely necessary to get all content in</li>
+<li>Decompression of the current area to a buffer (unavoidable due to the compressed format) reduces available memory</li>
+<li>Engine could have been better designed for resident memory footprint reduction from the start (e.g. not storing all actor definitions initially)</li>
+<li>NPC interaction code left to final stages ended up making spaghetti-like code compared to earlier games</li>
+<li>Bugs introduced by size-optimizing already working code; not enough warnings in the source code to avoid this</li>
+</ul>
+
+Now all that remains is to test some more and hope for no new bugs / no new release candidate builds (now sitting at RC2), wait for Jason from Psytronik to
+complete all the awesome packaging work, and then wait for the release itself.<br><br>
+
+Thanks for reading this series of WIP posts, hope you enjoy the game once it's out!<br><br>
+
+In the meanwhile, you can watch the trailer on YouTube:<br><br>
+<center>
+<iframe width="480" height="270" src="https://www.youtube.com/embed/HAZBTg24_GQ" frameborder="0"></iframe><br><br>
+</center>
+
+And yeah, the Turrican fanfiction got completed too, and it turned out much less similar to Steel Ranger's story than originally expected.
+Let's see if it appears somewhere someday...<br><br>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>9th November 2017:</b>
 <br><br>
 Steel Ranger has reached content complete status roughly as planned, with the story implementation / scripting taking most of October,
