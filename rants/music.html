@@ -100,7 +100,7 @@ The musicroutine also has to loop through all the 3 voices for multi-voice
 music. So it's essential to use the X or Y index registers for all accesses
 to voice variables, to avoid having to write the same code 3 times
 (in *extremely* optimized musicroutines, like the one in
-<a href="http://www.student.oulu.fi/~aeeben/johnplayer.html" target="_top">John Player by Aleksi Eeben</a> this rule is deliberately broken!)
+<a href="http://csdb.dk/release/?id=2630" target="_top">John Player by Aleksi Eeben</a> this rule is deliberately broken!)
 
 The usual flow of musicroutine execution is:
 - Process one frame of 1st voice
@@ -302,6 +302,16 @@ Playing sound effects within a musicroutine can be done at least in two ways:
   different set of variables for a voice's music and sound effect execution;
   most likely the sound effect can't now be a pattern with notes but something
   simpler instead, for example something similar to the waveform/arpeggiotable.
+  
+  In practice, it's wasteful to execute the full music channel routine while a
+  sound effect is going on, because it will be overridden by the sound's SID
+  values anyway. Instead, the playroutine can just read enough of the music data
+  so it can keep the note duration timing, the sequencer position + transpose 
+  and such, and skip all SID writes and effect processing related to the music. 
+  In this case, after the sound effect ends, the music channel should preferably 
+  be reset to such state that only the next non-legato music note will produce 
+  sound again, to avoid erratic audio output. For example, zero the waveform 
+  (silence) and stop any wavetable execution.
 
 
 3. How to represent the data in memory
@@ -409,17 +419,23 @@ To see the musicroutines I've personally written, you can take a look at:
 (contains just note data, no sequencedata and only pulsewidth modulation
 effect)
 
-<a href="http://covertbitops.c64.org/tools/goattrk.zip">GoatTracker</a>
+<a href="../tools/goattrk.zip">GoatTracker</a>
 (look at the files player1.s - player2.s. Many features, reasonably fast
 musicroutine(s), sound effect support in player2.s)
 
-<a href="http://covertbitops.c64.org/tools/goattrk2.zip">GoatTracker V2</a>
+<a href="../tools/goattrk2.zip">GoatTracker 2</a>
 (look at the files player1.s - player3b.s. Even more features while keeping
 approximately same rastertime as old GoatTracker)
 
-<a href="http://covertbitops.c64.org/tools/ninjatrk.zip">NinjaTracker</a>
+<a href="../tools/ninjatrk.zip">NinjaTracker</a>
 (minimalistic and fast playroutine centered on the wavetable - it does note
 init, arpeggio and vibrato/slides all in one.)
+
+<a href="../tools/ninjatr204.zip">NinjaTracker 2</a>
+(slightly more feature-rich but still minimalistic editor & player)
+
+<a href="https://github.com/cadaver/miniplayer">MiniPlayer</a>
+(github project, minimal/fast playroutine with no dedicated editor)
 
 Also, there are regular playroutine dissections in the <a href="http://digilander.libero.it/ice00/tsid/sidin/" target="_top">SIDin</a> online
 magazine.
