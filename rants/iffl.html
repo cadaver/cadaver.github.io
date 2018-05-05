@@ -14,16 +14,17 @@ system where all data files needed by a program are combined into one big
 file. This is typically seen in some newer game cracks. This rant
 describes my personal experiment of building such loadersystem.
 
-Note: use the IFFL system at your own risk! It's only meant for educational use
+Use this IFFL system at your own risk! It's only meant for educational use
 though it might work fairly well. Loading of packed files (whatever packer you
 might need) is left as an exercise, by default it only loads unpacked files.
 
-Note 2: IFFL sector scanning code inspired by works of Triad (Quorthon?) &
+IFFL sector scanning code inspired by works of Triad (Quorthon?) &
 Nostalgia (Fungus / Zagon / GRG / DocBacardi). Metal Warrior 3 and Myth
 IFFL cracks used for reference.
 
 <a href="iffl.zip">IFFL system disk image and source</a>
-<a href="iffl_ide64.zip">IFFL system modified for IDE64 by Soci</a>
+
+The IFFL tools have been updated to incorporate fixes by Luigi Di Fraia.
 
 
 1. IFFL theory of operation
@@ -913,19 +914,29 @@ drivecodeend_c64:
 loadbuffer:     ds.b 254,0
 bufferstatus:   dc.b 0
 
-6. Conclusion
 
-The IFFL code can be a bit complex to understand, but don't be discouraged.
-It's free to be used for any purpose, though for it to be really useful you
-likely have to add loading of packed files, and perhaps multi-drive support?
+6. Conclusion and further references
 
-Personally I'm likely to never use an IFFL system, because the datafile can 
-be clumsy to copy on a C64 and a second version of the loader would have
-to be created for 64HDD or IDE64 compatibility - buffering the whole
-datafile to extra-RAM and using it from there, not good for users without
-extra-RAM :(
+Though the code was only meant as an example of the IFFL concept, it still ended
+up somewhat complex. Personally, I'm unlikely to use IFFL in own productions,
+due to difficulty in retaining support for any devices.
 
-But, even that said, have fun!
+For IDE64, IFFL support is possible due to the random access seek mechanism, see
+this modified version of the IFFL code provided by Soci / Singular:
+
+<a href="iffl_ide64.zip">IFFL system modified for IDE64 by Soci</a>
+
+But for general Kernal-only loading compatibility without random access support,
+the IFFL file scanning / seeking could end up slow due to having to load the
+whole file byte by byte until the desired position is reached.
+
+Finally, Luigi Di Fraia has a GitHub project where this IFFL system is improved 
+further, to be better ready for actual production use, including compression and
+multiple drive support. See here:
+
+<a href="https://github.com/luigidifraia/iffl-system" target="_top">iffl-system by Luigi Di Fraia</a>
+
+As always, have fun!
 
 
                                                   Lasse Öörni
