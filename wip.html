@@ -14,10 +14,117 @@ MW ULTRA - work in progress
 </font>
 </p>
 
-<table width="600">
+<table width="700">
 <tr>
 <td>
 <font face="Arial" size="2">
+
+<p align="justify">
+<b>11th June 2018:</b><br><br>
+This update goes more in-depth into the sprite handling and scrolling in MW ULTRA.<br><br>
+
+Previous Covert Bitops games since Metal Warrior 4 have operated on the principle of each sprite frame having hotspot and "connect-spot" coordinates, and multi-sprite actors being
+constructed by chaining these sprites one after one. The hotspot defines the sprite's origin, and the "connect-spot" tells where to place the origin of the next sprite.
+For example humanoid actors' chain is: lower body, upper body, weapon.<br><br>
+
+That particular chain works well, but designing multi-sprite boss enemies quickly gets tedious, as the sprites typically have to be joined from their corners to form
+the complete shape. For example the 4-sprite large spherical droid that is the first boss in Steel Ranger. Furthermore, when pixeling the sprites individually it's harder to
+get the shape right.<br><br>
+
+Therefore MW ULTRA improves this system by introducing separate "logical sprites" in addition to physical (hardware) sprites.<br><br>
+
+Each logical sprite has the hotspot and connect-spot, as before. But it can consist of multiple physical sprites as necessary. To use the Steel Ranger boss as an example,
+since it has no separately moving parts, it could be one logical sprite with four physical sprites.<br><br>
+
+The handling of human actors doesn't change much; since the lower and upper body can animate individually, they still need to be separate logical sprites.<br><br>
+
+The logical sprites also include collision box information, so collision bounds can now be edited graphically instead of typing them into source code.
+Physical sprites within a single logical sprite can have different colors, as well as X-expansion on or off. Each physical sprite is a separate "object" within its resource
+file, and duplicate shapes can be detected, so for example a large car with front and rear wheels the same would save memory.<br><br>
+
+The previous games used a few hardcoded routines for splitting actors into sprites. Typically these were an optimized routine for one sprite actors, a generic routine for
+n sprites long sprite chain, and a separate piece of code for the humanoids.<br><br>
+
+In MW ULTRA, each actor type has its own "draw" routine in addition to the tick update routine, and it will be called to output the actor's logical sprites. 
+This allows greater freedom and extra logic during the draw if necessary. Furthermore for NPCs, enemies and bosses both the draw and update routines can be 
+loadable code instead of residing in the main game engine, so the engine's resident code size can be reduced.<br><br>
+
+The logical sprites are in turn split into physical sprites. In practice, optimization mandated that there's a separate fast path for logical sprites that have only one 
+physical sprite and max. one collision box. In this case the logical sprite resource object also contains the actual sprite data, which saves resource file memory overhead. 
+Furthermore, one resource file has a limit of max. 128 resource objects, so that allows placing more sprite frames into the same resource file.<br><br>
+
+The screenshot below illustrates the new sprite editor in action, editing a large enemy:<br><br>
+</p>
+
+<p align="center">
+<img src="wip/spriteeditor.gif" align="center" alt="Multi-sprite editor + large enemy being edited"><br><br>
+</p>
+
+<p align="justify">
+Then the second topic, the scrolling.<br><br>
+
+Arriving at the somewhat unorthodox "whole screen redraw" scrolling in MW ULTRA required some prototyping and experimenting.<br><br>
+
+Both the first and fourth Metal Warrior games (with Ian as the playable character) opted for color-per-tile graphics and 4x4 char tiles, making it impossible to get colorful
+details to the graphics. At the time of writing Metal Warrior 4, it seemed absolutely impossible to get both color-per-char graphics and any sophisticated 
+AI routines in. Hessian solved the problem by having 8-way scrolling with limited speed, dividing the screen and color RAM update on 3 frames total. Steel Ranger had
+multidirectional scrolling, but a smaller scrolling window and much simpler enemy AI code. Plus neither player or enemies had separate weapon sprites, so the total load
+on the actor and sprite system was kept lower.<br><br>
+
+Reusing Hessian's 8-way scrolling was not really an option for MW ULTRA, as it will lag behind in fast falling motion, and generally introduce a jagged feeling
+to the scrolling, which would fit badly with the varied scrolling speed (running vs. crouchwalking) and shifting the scrolling center depending on the player character's
+facing direction (ie. show more of the world in forward direction.)<br><br>
+
+Therefore the initial options appeared to be:<br>
+- Traditional color-per-char, multidirectional scrolling, but with a limited-size scrolling window.<br>
+- Color-per-tile, with 2x2 tiles. The saved CPU time would allow a max.size scrolling window (22 rows) while keeping one row for the status display.<br><br>
+
+Before starting Steel Ranger's development, I had briefly experimented with redraw-based scrolling, using the tilemap data directly, but it seemed to have too much CPU overhead
+and therefore not be promising. But in contrast to traditional scrolling, redrawing could allow to handle different tiles differently for optimization, e.g. some tiles could use a single color RAM value, or even a
+single screen RAM value, or skip color RAM writes altogether.<br><br>
+
+This time Ian would hopefully get the colorful background graphics he deserved, so the first option of the two looked more promising. It would also cut down on scrolling
+code size, since only three different color RAM copy loops (up, down, horizontal) would be required. In contrast, an optimized 2x2 color-per-tile scrolling would practically need 
+separate color shift routines for each of the 8 directions.<br><br>
+
+However, early tests proved that scrolling that way could consume CPU time so much that slowing down could result in situations where the screen scrolls fast,
+so that practically every frame is a scrolling frame, the player fires a full-auto weapon, and there are also enemy actors on the screen. And this was without any AI or enemy firing so far!<br><br>
+
+Therefore I returned to examining redraw-based scrolling methods, and found a way to optimize the overhead of the tilemap access to acceptable. The key is indexing both
+the screen and the tilemap data with the same CPU index register, leaving the other index register for the current tile's number for tile data access. With 2x2 blocks, the
+screen indices would skip every second value, ie. 0, 2, 4... so also tilemap data would need to have the same tile row's tiles spaced to every second byte.<br><br>
+
+This proved not to be a severe problem, as two tilemap rows can be interleaved. Therefore, no wasted memory space.<br><br>
+
+Each of the visible tile map rows is handled in its own piece of code, so before the redraw, tile map addresses for each row need to be calculated. The redraw
+code is modified directly for that, so that absolute address access can be used.<br><br>
+
+The redraw writes to both the screen RAM and the color RAM at the same time, from the top to the bottom, so a doublebuffered screen is not required, but the redraw takes almost
+a whole frame (on NTSC it gets very tight!) At first this seems counterintuitive, but the redraw happens in an IRQ that starts from the middle of the screen, and meanwhile the main
+program is already calculating the next frame ahead as much as it can, without any busy-waiting. Given this, it appears that it's better to have a large amount of CPU time taken away,
+followed by a frame that's completely free for game logic processing, instead of taking half of every frame for alternatively shifting either the screen or the color RAM,
+as Steel Ranger does.<br><br>
+
+The final thing to decide was: which kind of tiles would be possible? Initially, the redraw supported only two: either color-per-char (charcode & colorcode the same), or a
+"default color" tile which skips the color RAM write completely. The default color would only be initialized when entering an area, not during scrolling. And
+other colors could not be allowed to "leak" onto the default color areas. This scheme required only one branch per tile, but proved too limiting in practice.<br><br>
+
+Therefore it was necessary to add also actual color-per-tile tiles. This slows down the redraw slightly, as one more branch per tile is possible. However otherwise it would
+likely be impossible to produce the background graphics the game needs.<br><br>
+
+After the redraw code was in place, the world editor (based on Steel Ranger's world editor) needed to be modified to support the tile types, and the char allocation scheme that
+keeps the charcode & color same. The editor needs to analyze the map data and check for which tiles the color RAM writes can be optimized away. When necessary, two copies are 
+produced from a single tile: one with optimization, the one without. Color-per-tile tiles are actually slowest to draw due to needing to access the tile color separately, 
+so they are avoided if the right chars for a color-per-char tile can still be allocated.<br><br>
+
+The editor can also show a debug visualization, to see how the tiles will be drawn, which is shown in the screenshot below: (C is "color-per-char" and O is "optimize" which skips color RAM writes)<br><br>
+</p>
+
+<p align="center">
+<img src="wip/worldeditor.gif"alt="World editor & tile type debug visualization"><br><br>
+</li>
+</p>
+<br><br><br>
 
 <p align="justify">
 <b>6th June 2018:</b><br><br>
