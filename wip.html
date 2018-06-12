@@ -113,9 +113,9 @@ Therefore it was necessary to add also actual color-per-tile tiles. This slows d
 likely be impossible to produce the background graphics the game needs.<br><br>
 
 After the redraw code was in place, the world editor (based on Steel Ranger's world editor) needed to be modified to support the tile types, and the char allocation scheme that
-keeps the charcode & color same. The editor needs to analyze the map data and check for which tiles the color RAM writes can be optimized away. When necessary, two copies are 
-produced from a single tile: one with optimization, the one without. Color-per-tile tiles are actually slowest to draw due to needing to access the tile color separately, 
-so they are avoided if the right chars for a color-per-char tile can still be allocated.<br><br>
+matches the charcode to the char's color. The editor needs to analyze the map data and check for which tiles the color RAM writes can be optimized away. When necessary, two copies are
+produced from a single tile: one with optimization, the one without. Color-per-tile tiles are actually slowest to draw due to needing to access the tile color separately,
+so they are avoided if the right charcodes for color-per-char operation (max. 16 chars with the same color) can still be allocated.<br><br>
 
 The editor can also show a debug visualization, to see how the tiles will be drawn, which is shown in the screenshot below: (C is "color-per-char" and O is "optimize" which skips color RAM writes)<br><br>
 </p>
