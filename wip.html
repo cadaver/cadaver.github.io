@@ -112,6 +112,9 @@ other colors could not be allowed to "leak" onto the default color areas. This s
 Therefore it was necessary to add also actual color-per-tile tiles. This slows down the redraw slightly, as one more branch per tile is possible. However otherwise it would
 likely be impossible to produce the background graphics the game needs.<br><br>
 
+Doing scrolling by redraw also gives the possibility to easily make arbitrarily large background animations (e.g. opening doors), as the CPU cost is just the same for scrolling,
+and there doesn't need to be separate redraw code for the animations, like in the previous Covert Bitops games.<br><br>
+
 After the redraw code was in place, the world editor (based on Steel Ranger's world editor) needed to be modified to support the tile types, and the char allocation scheme that
 matches the charcode to the char's color. The editor needs to analyze the map data and check for which tiles the color RAM writes can be optimized away. When necessary, two copies are
 produced from a single tile: one with optimization, the one without. Color-per-tile tiles are actually slowest to draw due to needing to access the tile color separately,
