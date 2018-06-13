@@ -1,3 +1,4 @@
+<meta name="viewport" content="width=768">
 <html>
 <head>
 <title>Covert Bitops C64 page</title>
@@ -8,7 +9,7 @@
 <p><br><br></p>
 
 <p>
-<img src="wipold2/logo.gif" alt="Steel Ranger logo">
+<img src="games/steelrangerlogo.gif" alt="Steel Ranger logo">
 <br><br>
 <font face="Arial" size="4">
 Steel Ranger - work in progress
@@ -48,7 +49,8 @@ the game also makes the enemies not hunt the player actively, to make it not so 
 But it turned out the game wasn't actually content complete when initially thought to be...<br><br>
 
 Adding the proper end credits quickly reduced the available disk space to 0 blocks free, as expected. However, the tone of the game's complete ending
-left a bit to be desired. It wasn't feeling victorious enough, and dialogue between the NPCs was lacking. So, it was time to start figuring out ways to compress the ending code better so that a few more lines of dialogue could be included. Sometimes
+left a bit to be desired. It wasn't feeling victorious enough, and dialogue between the NPCs was lacking. So, it was time to start figuring out ways 
+to compress the ending code better so that a few more lines of dialogue could be included. Sometimes
 this needed to go to rather esoteric lengths, e.g. reordering code or writing it a bit differently in hope that it results in a shorter Exomizer
 compressed data stream!<br><br>
 
@@ -67,7 +69,8 @@ can actually spoil some end-game dialogue, but that's the price the game has to 
 
 The tale of the improved ending / story does not quite end here.<br><br>
 
-The optional task code also deals with the player entering an area too early, and giving damage in that case. This effect activates or deactivates through entry / exit triggers placed in the world map. Mostly by luck, a rather serious bug
+The optional task code also deals with the player entering an area too early, and giving damage in that case. This effect activates or deactivates through 
+entry / exit triggers placed in the world map. Mostly by luck, a rather serious bug
 related to this was uncovered: if the player exited the area, then saved, then re-entered, the damage effect would stay on! This was because of the
 exit trigger remaining "stuck" and not triggering again. Normally this would not have happened, but the game disables saving when the player is in serious
 danger that could make the game uncontinuable, and saves manually (instead of automatic save on each room / area transition) once the danger is over.
