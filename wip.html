@@ -19,6 +19,47 @@
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>1st July 2018:</b><br><br>
+Among other work (mastering also to EasyFlash cartridge format, plus the option for using a second firebutton to jump, both requested on Lemon64),
+creating the soundtrack for MW ULTRA is now underway, with 6 songs complete so far.<br><br>
+
+The soundtrack is shaping up to be a little more atmospheric and less drum-heavy compared to Hessian & Steel Ranger, and could even be considered as a complementary
+method of storytelling. MW ULTRA will not have a silent protagonist like the two previous games, but yet we can count on Ian not speaking that much,
+and certainly not actually thinking aloud, so the soundtrack aims to provide additional insight into his headspace.<br><br>
+
+The basic workflow for composing is still the same as before: songs are initially composed in GoatTracker 2, taking into account
+the player limitations, then converted. The conversion is now easier, as the "minplayer" converter program produces the output directly in source code format ready for the
+build process, instead of having to manually run NinjaTracker 2 and use its packer / relocator function to save the final song data.<br><br>
+
+For testing on real C64 hardware, and to also check how the sound effects play on top of each song, the game's build process also creates a sound test program,
+in which the tunes & sounds can be triggered with keys. When music is playing, sounds are played on the 1st channel only, that is typically reserved for the lowest
+volume instruments, such as arpeggios or secondary melodies.<br><br>
+
+The "miniplayer" uses a one-frame pseudo hardrestart somewhat similar to DMC4. One frame before the next note's start, the gatebit is switched off and ADSR release is set
+to maximum (15.) Combined with a silent first frame (typically testbit + gate), this ensures even note starts, but doesn't give time for the sound to automatically
+start from zero volume, like a proper two-frame hardrestart would do. Therefore some care is needed in composing, to set the notes to manually release early enough.
+Fortunately GoatTracker 2 can be made to mimic this kind of operation with the hardrestart ADSR parameter, and setting "gateoff timer" to 1 in all instruments.<br><br>
+
+Because notes don't always start strictly from zero volume, they blend to each other more naturally, giving the music a more organic feel. All previous Metal Warrior games that
+used the earlier music playback routines had 1-frame hardrestart as well, so it's also keeping the tradition :)<br><br>
+
+Again, using the SID filter presents a challenge. Each 6581 SID has its unique cutoff frequency curve, and filtering a voice
+also lowers its volume a little. Emulation usually doesn't account for this, so there's a risk of making some sounds too loud for emulation users, or too silent for
+real hardware. Yet using the filter is an essential part of C64 music, so this time either, leaving it out would not be a real option.<br><br>
+
+Like in Steel Ranger, the game detects the SID model (6581 or 8580) on startup, and will adjust the filter cutoff for 8580 to mimic a typical 6581 (keeping tradition,
+the songs are composed for 6581.) This time the cutoff adjustment is no longer just a constant subtraction, but is strongest in the middle of the cutoff range,
+using a linear function resembling an inverted triangle wave. It takes only a few assembly instructions, yet is surprisingly effective.<br><br>
+
+To not spoil "significant" themes like the title screen theme yet, here's a preview of the new "inside buildings" theme. In the original Metal Warrior it was just a repeating
+melody, less than one minute total:<br><br>
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/PEnOuGKmKBk" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>11th June 2018:</b><br><br>
 This update goes more in-depth into the sprite handling and scrolling in MW ULTRA.<br><br>
 
