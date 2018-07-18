@@ -1,0 +1,80 @@
+<meta name="viewport" content="width=960">
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<center>
+  <canvas id="canvas" width=960 height=600></canvas><br><br>
+  <textarea class="emscripten" id="output" rows="4" style="width: 50%; background-color: #646464; color: #a0fca0; border: 0px"></textarea><br>
+  <font face="Arial" size="2">
+  <p align="center">
+    Powered by <a href="https://github.com/cadaver/oldschoolengine2-emscripten" target="_top">OldschoolEngine2</a> & <a href="http://kripken.github.io/emscripten-site/" target="_top">Emscripten</a><br>
+    Use cursor keys + ctrl for joystick control.
+  </p>
+  </font>
+  <script type='text/javascript'>
+    var consoleElement = document.getElementById('output');
+    consoleElement.value = '';
+
+    var Module = {
+      fdBuf: ['', '', ''],
+      writeStdin: function(text) {
+        if (text == 0x08) {
+          if (Module.fdBuf[0].length > 0) Module.fdBuf[0] = Module.fdBuf[0].length.substr(0, Module.fdBuf[0].length-1);
+          return;
+        }
+        var lastnl = text.lastIndexOf('\n');
+        if (lastnl == -1) {
+          Module.fdBuf[0] += text;
+          return;
+        }
+        Module.fdBuf[0] += text.substr(0, lastnl+1);
+        var len = lengthBytesUTF8(Module.fdBuf[0]);
+        var buf = _malloc(len+1);
+        stringToUTF8(Module.fdBuf[0], buf, len+1);
+        _writeStdin(buf, len);
+        _free(buf);
+        Module.fdBuf[0] = text.substr(lastnl+1);
+      },
+      writeOut: function(fd, ptr, len) {
+        if (!ptr) return;
+        var str = (typeof ptr === 'number') ? String.fromCharCode.apply(String, HEAPU8.subarray(ptr, ptr + len)) : ptr;
+        consoleElement.value += str;
+        consoleElement.scrollTop = consoleElement.scrollHeight;
+        var nl = str.indexOf('\n');
+        if (nl == -1) {
+          Module.fdBuf[fd] += str;
+          return;
+        }
+        var log = (fd == 2) ? console.error : console.log;
+        log(Module.fdBuf[fd] + str.substr(0, nl));
+        var nextnl = str.indexOf('\n', nl+1);
+        while (nextnl != -1) {
+          log(str.substr(nl+1), nextnl-nl-1);
+          nl = nextnl;
+          nextnl = str.indexOf('\n', nl+1);
+        }
+        Module.fdBuf[fd] = str.substr(nl+1);
+      },
+      print: function() {
+        Module.writeOut(1, Array.prototype.slice.call(arguments).join(' ') + '\n');
+      },
+      printErr: function() {
+        Module.writeOut(2, Array.prototype.slice.call(arguments).join(' ') + '\n');
+      },
+      canvas: (function() { return document.getElementById('canvas'); })(),
+    };
+
+    Module['arguments'] = window.location.search.substr(1).trim().split('&');
+    // If no args were passed arguments = [''], in which case kill the single empty string.
+    if (!Module['arguments'][0]) {
+        Module['arguments'] = [];
+    }
+  </script>
+  <script async type="text/javascript" src="oldschoolengine2.js"></script>
+</center>
+</body>
+</html>
+
+
