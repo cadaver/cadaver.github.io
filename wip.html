@@ -19,6 +19,73 @@
 <font face="Arial" size="2">
 
 <p align="justify">
+<b>22nd July 2018:</b><br><br>
+The "long" songs (title, level themes, ending) of the MW ULTRA soundtrack are all done!<br><br>
+
+After this, before tackling more of the gameplay things (enemy behavior, stealth mechanics), I took an opportunity to test something
+that had never featured in Covert Bitops games before: a grapple gun in the style of Batman the Movie and Bionic Commando.<br><br>
+
+The gun is just a weapon that fires a special kind of bullet: the grappling hook. When the hook's code is active, it does some "magic"
+to the player attack state: firing again (or switching weapons) is prevented, and the player character remains in the aiming pose (arm extended) as long as the
+hook is flying through the air.<br><br>
+
+This is really the easy part, but the rope itself presents two math-heavy challenges for the C64's limited instruction set: the arc-like motion when the player is swinging on it, plus drawing it on the screen.
+Since MW ULTRA doesn't use char bullets, just sprites, it's logical for the rope to also be all sprites, which are fed into the sprite multiplexer just like any actor sprites.<br><br>
+
+My hypothesis was that 12 predefined sprite frames with different angles would be enough to get a reasonably accurate rope "line", and it turned out OK.
+These sprites are placed at 21 pixel intervals vertically, until the whole rope length is drawn. For more accuracy, one can alternate between two frames when the angle is "inbetween." Finally there are another 12 sprites
+with only half of the vertical space covered for a shorter final piece. As these are stored compressed, the total memory use of the hook + rope sprite frames is reasonable, about 500 bytes.<br><br>
+
+Initially the frame to use would be chosen from a 16 x 16 lookup table, indexed by horizontal and vertical distance (scaled by bit-shifting right until both are below 16) but
+this was later replaced with real-time math: multiply X distance by 11, then divide by Y distance, and you have the sprite frame between 0 - 11. If there's a remainder
+equal or greater to half of the Y distance, then alternate between two frames. Since the divide routine I use only operates on 8 bit values, the X * 11 needs to be
+pre-shifted right (along with the divisor) until it fits into 8 bits.<br><br>
+
+To avoid overflows or the need for 16-bit math the distance from hook to player is calculated at two pixel accuracy both horizontally and vertically; it turns out to not look too bad.<br><br>
+
+Without the "each actor has its own draw routine" mechanism drawing the rope would have required support in the resident game engine code, but now it doesn't,
+practically the engine does not need to even know of its existence at all. The rope is drawn as part of the grappling hook's draw routine, which means that if the hook is too far
+outside the screen, the rope doesn't draw at all! Therefore the maximum length needs to be limited. <br><br>
+
+This covers the rendering, but what about the movement?<br><br>
+
+It turns out there's no need for trigonometry tables, or using an angle representation for the swing motion, instead applying the Pythagorean theorem
+(x^2 + y^2 = l^2, where l is the total rope length) is enough. It's needed in two cases:<br><br>
+
+- When the grappling hook attachs, the rope length gets calculated from the current X & Y distance between the player and the hook.<br><br>
+- When the player position is updated during the swing, the Y-coordinate is calculated from the rope length and player's current X position (ie. y^2 = l^2 - x^2).<br><br>
+
+Solving l or y requires a square root routine. Thanks go to Graham for the <a href="http://codebase64.org/doku.php?id=base:fast_sqrt" target="_top">"fast square root"</a> routine on Codebase64.<br><br>
+
+The acceleration to make the player swing back and forth comes simply from the rope frame: the acceleration is strongest on the extreme sides and zero in the middle.
+Angles greater than 45 degrees cannot be drawn with the 12 rope sprite frames, so the maximum swing speed needs to be limited proportionally to the current rope length to prevent a too extreme angle happening in the first place.<br><br>
+
+The control mechanics are the same as in Batman the Movie; while swinging it's possible to either spool the rope in or out to ascend and descend, or apply a small swing force to the left or right.
+Pressing fire detaches the hook.<br><br>
+
+Also similar to Batman the Movie, colliding with a wall during the swing will cause the hook to detach automatically and for the player to start falling. This simply
+reuses the ordinary jump collision detection.<br><br>
+
+When the hook detaches, it starts to spool in automatically; it simply "homes in" toward player at a speed proportional to the distance. If the player is falling, the hook could end up "chasing" the player for 
+a longer time than looks good, but this can be fixed by adding the player's Y-velocity to the hook (this fix is not yet in use in the video below.) Upon detaching, the player's final swing velocity is applied as the new jump
+velocity, so that the transition to jumping or falling is smooth.<br><br>
+
+Another thing that contributes to the smoothness is making sure that launching the hook can be done at any time: standing, walking or jumping, and it doesn't restrict player motion before the hook attaches.
+This is in contrast to Batman the Movie, where Batman stops while the rope spools out.<br><br>
+
+Being so math-heavy, the hook + rope routines do consume some CPU time, and a maximum length rope also stresses the sprite multiplexer fairly much. Using it with many enemies around could result in a momentary
+overload, either slowing down the game or resulting in missing sprites. However, this should be balanced by survival instinct: as the player character can't attack while on the rope, using it in combat is risky and
+likely best avoided :)<br><br>
+
+Here's the end result captured on video:<br><br>
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/pz97G0Nc_VY" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
+
+<p align="justify">
 <b>1st July 2018:</b><br><br>
 Among other work (mastering also to EasyFlash cartridge format, plus the option for using a second firebutton to jump, both requested on Lemon64),
 creating the soundtrack for MW ULTRA is now underway, with 6 songs complete so far.<br><br>
