@@ -33,7 +33,7 @@ This is really the easy part, but the rope itself presents two math-heavy challe
 Since MW ULTRA doesn't use char bullets, just sprites, it's logical for the rope to also be all sprites, which are fed into the sprite multiplexer just like any actor sprites.<br><br>
 
 My hypothesis was that 12 predefined sprite frames with different angles would be enough to get a reasonably accurate rope "line", and it turned out OK.
-These sprites are placed at 21 pixel intervals vertically, until the whole rope length is drawn. For more accuracy, one can alternate between two frames when the angle is "inbetween." Finally there are another 12 sprites
+These sprites are placed at 21 pixel intervals vertically, until the whole rope length is drawn. For more accuracy, one can alternate between two frames when the angle is "inbetween." Finally there are another 12 frames
 with only half of the vertical space covered for a shorter final piece. As these are stored compressed, the total memory use of the hook + rope sprite frames is reasonable, about 500 bytes.<br><br>
 
 Initially the frame to use would be chosen from a 16 x 16 lookup table, indexed by horizontal and vertical distance (scaled by bit-shifting right until both are below 16) but
