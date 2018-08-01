@@ -17,6 +17,133 @@
 </font>
 </p>
 <font face="Arial" size="2">
+<p align="justify">
+<b>2nd August 2018:</b><br><br>
+Now also the shorter bossfight and "danger" songs of the soundtrack are done. These 7 additional tunes were expertly composed by Kamil Wolnikowski (Jammer), so now the soundtrack totals 23 subtunes.<br><br>
+
+The initial set of weapons for the game are complete as well, adding up to 15 of them with the grapple gun counted in.<br><br>
+
+The disheartening part of implementing weapons, or any new features that go into the always-resident main part of the game, is seeing the code & data size grow. For weapons, there's much data to include: the weapon definition data including bullet speed, duration, damage, which sound effects to play for shooting and for reloading,
+the actor definitions for the bullets, the bullets' movement code (if special behavior is needed, such as the bouncing of grenades), the weapon sound effect data itself, and also the name texts of the weapons.<br><br>
+
+Therefore, after adding a bunch of new stuff, it's often beneficial to stand back and see whether the resident code & data could be reduced in size to compensate. In the best case some code doesn't need to be executed at all, leading to both size and CPU time reduction.
+Other times it's a tradeoff between memory use and execution speed. For example I know that by writing unnecessarily to the 40th (invisible) screen column, the screen redraw code could be reduced by almost half a kilobyte, at the expense of being slower due to the unnecessary writes. This might yet become in handy in a memory emergency.<br><br>
+
+One of the first things to optimize this time was the sound effect format. The Miniplayer follows the same idea as the <a href="http://codebase64.org/doku.php?id=base:sound_fx_routine" target="_top">Prince of Persia C64 sound routine</a>, so that each sound effect frame starts with a bitmask byte,
+telling what further data to read & put into the SID registers this frame. However, in practice changing the waveform and frequency occurs most often. Ideally these should be optimized to not require a separate bitmask byte at all.<br><br>
+
+Since MW ULTRA's sound effects are single-channel, they cannot use sync & ringmod bits in the waveform, so those bits could be used instead to tell if a frequency change or frequency slide are also going to occur on the same frame.<br><br>
+
+Frequency-only frames could likewise be optimized for a limited range of frequencies. We just need to be able to distinguish between waveform changes, frequency changes, ordinary bitmask frames, and "delay / wait" steps. To simplify code, the Miniplayer feature of being able to change pulse only would be dropped 
+as unnecessary. Therefore the final encoding of sound effect frame start bytes becomes:<br></p>
+
+<pre>
+$00     End of sound effect
+$01-$8f Waveform change, bit 2 = frequency follows, bit 4 = frequency slide follows
+$90-$9f No waveform change. Bit 1 = init ADSR/pulse follows, bit 2 = frequency follows, bit 4 = freq. slide follows
+$a0-$df Set frequency only, possible range $00-$3f (high byte)
+$e0-$ff Delay for x frames
+</pre>
+
+<p align="justify">
+Here's the data of one sound effect before and after:<br>
+</p>
+
+<pre>
+SFXINIT+SFXPULSE,$06,$d5,$08
+SFXWAVE+SFXFREQ,$81,$c0
+SFXWAVE+SFXFREQ,$11,$0d
+SFXWAVE+SFXFREQ,$80,$80
+SFXWAVE+SFXFREQ,$40,$0a
+SFXWAVE+SFXFREQ,$80,$60
+SFXWAVE+SFXFREQ,$40,$07
+SFXWAVE+SFXFREQ,$80,$40
+SFXWAVE+SFXFREQ,$40,$06
+SFXEND
+</pre>
+
+<p align="justify">
+Optimized, it becomes:<br>
+</p>
+
+<pre>
+SFXINIT,$06,$d5,$08
+$81+SFXFREQ,$c0
+$11+SFXFREQ,$0d
+$80+SFXFREQ,$80
+$40+SFXFREQ,$0a
+$80+SFXFREQ,$60
+$40+SFXFREQ,$07
+$80+SFXFREQ,$40
+$40+SFXFREQ,$06
+SFXEND
+</pre>
+
+<p align="justify">
+In total, over 100 bytes were saved by the sound effect format change.
+
+More bytes could be eliminated by changing some logic in the code. Due to working on the weapons last, I focused on the weapon & attack code now as well (an earlier size-optimization pass had already removed about 300 bytes from all over the code).<br><br>
+
+One example: Ian can do a flying kick move while jumping, but he shouldn't be able to kick twice during a single jump. The unoptimized code transitioned from the "flying kick" state back to the ordinary "jumping / falling / walking" state after the kick animation,
+and a variable needed to be set & checked to prevent the second kick. This logic could be changed to stay in the flying kick state until landing instead, in which case a not-insignificant amount of code could be eliminated.<br><br>
+
+The following piece in the flying kick state code (check for animation end and do state transition)<br>
+</p>
+
+<pre>
+ldy actF1,x
+lda flyingKickDelayTbl-FR_FLYINGKICK,y
+ldy #FR_FLYINGKICK+2
+jsr OneShotAnimation
+bcc MH_FlyingKickAnimDone
+ldy #STATE_UPRIGHT
+lda #FR_JUMP+2
+jmp MH_SetStateAndFrameCustom
+</pre>
+
+<p align="justify">
+would become (note that the oneshot animation routine stays safely in the end frame even if called after finishing)<br>
+</p>
+
+<pre>
+ldy actF1,x
+lda flyingKickDelayTbl-FR_FLYINGKICK,y
+jmp OneShotAnimation
+</pre>
+
+<p align="justify">
+And now the check for the second kick in the attack triggering code (shown below) could just go away:<br>
+</p>
+
+<pre>
+lda currFireCtrl
+and #JOY_UP
+beq AH_Done
+lda actFd2,x
+bne AH_Done ;Do not allow second kick
+inc actFd2,x ;Mark kick already performed
+ldy #STATE_FLYINGKICK
+jsr MH_SetStateAndFrame
+</pre>
+
+<p align="justify">
+Additionally, the check for the "up" direction (least significant bit) can be changed to an lsr instruction, so the final code would become:<br>
+</p>
+
+<pre>
+lda currFireCtrl
+lsr
+bcc AH_Done
+ldy #STATE_FLYINGKICK
+jsr MH_SetStateAndFrame
+</pre>
+
+<p align="justify">
+These optimizations do not save *that* many bytes at once, but the idea is to keep going through the code with a creative mindset, until the bytes saved begin to add up. Another trick to remember is reordering data where possible so that extra instructions accessing it can be kept to a minimum.<br><br>
+
+After this size-optimization pass it's finally time to start refining the combat AI, and begin implementing the proper stealth mechanics in the game, which might include hiding behind objects. Until next time!<br><br>
+</p>
+<br><br><br>
 
 <p align="justify">
 <b>22nd July 2018:</b><br><br>
