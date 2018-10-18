@@ -13,21 +13,79 @@
 <p align="center">
 <img src="games/mwultralogo.gif"><br><br>
 <font face="Arial" size="4">
-<b>MW ULTRA - work in progress</b>
+<b>MW ULTRA - work in progress</b><br><br><br>
 </font>
 </p>
 <font face="Arial" size="2">
+<p align="justify">
+<b>19th October 2018:</b><br><br>
+Some time has passed since last update, and the game has also progressed much in the meanwhile, bringing the game's always-resident engine code to almost completion.<br><br>
+
+After getting the weapons in, it was time to look at how the enemies and NPCs do navigation / pathfinding in the game world. The early Metal Warrior games did not have much movement AI to speak of, the enemies either made random decisions at junctions, or just tried to home at the player.
+Metal Warrior 4 and Hessian both use a kind of "ad-hoc" pathfinding, where the character looks for routes of opportunity at their current location. For example if the target is below, and there is a ladder leading down at the character's feet, it makes sense to climb down.
+This works well most of the time, but trouble arises when the character is far from a junction, and doesn't know whether to go left or right first. This could lead to them trying the wrong direction first, appearing less intelligent.<br><br>
+
+This kind of pathfinding was also initially in use for MW ULTRA. But as the old problems reappeared, it was time to see if something better could be done.
+The ideal solution would be a full precalculated navmesh of all walkable / climbable sections in each area, with information on how the sections are connected, but the memory use would easily be too much for the C64. Therefore a simpler "halfway" solution was developed. The world editor now automatically detects the walkable platforms, stairs and ladders in each area, and store their coordinates / sizes, but doesn't store connection information. Instead, the character AI finds out the next adjacent section during runtime. It also knows the section the target character (typically the player) is on,
+and tries to choose the next route step which allows to get closest to the target. Finally, any large drops and platforms the AI shouldn't attempt navigating to, can be tagged in the editor. This is to avoid getting stuck in a loop when the player character for example uses the grapple gun to get above, but the AI cannot follow.<br><br>
+
+With this system in place, enemies now appear to react intelligently to the player's position, and re-evaluate their route as necessary. For example if the player opts to drop from a large height (and likely take fall damage), the enemy will instead turn around and head for a ladder down if available, to reacquire the player on the platform below. Each navigable section takes 5 bytes of memory to define (type, coordinates, size) and there can be a total of 48 in a single scrolling area. The exact amount can be adjusted later as necessary.<br><br>
+
+After pathfinding, the next step was to work on "indicators" that appear on top of an enemy's head to let the player know their status. An exclamation mark appears when they see the player. Lethal and non-lethal defeat of an enemy also have their own icons.<br><br>
+
+Then it was time for another larger feature which had been postponed for a while, the stealth gameplay elements. The enemies already could detect line-of-sight to the target, so it was possible to hide from sight above or below a solid platform, or behind walls. But open areas allowed the enemies to easily detect and fire on the player, so something more was needed. With a few good suggestions from the Lemon64 forum, the game now implements "cover objects" like pillars or closets, that the player can go hiding next to. This is activated by pressing up on the joystick; the player character appears to go a little further in the depth direction. Enemies' sight is now blocked from the side of the object. If an enemy will then walk by, not yet alerted, the player can perform an attack with a surprise damage bonus.<br><br>
+
+Stealth mechanics also needed the reimplementation of the "make noise" feature from Metal Warrior 4. Footsteps, gunshots and all other sounds define a radius in which they make the enemies suspicious. This is indicated by a question mark indicator. The loudest sounds always alert every enemy on the screen no matter the distance, and like in Metal Warrior 4, for a time all new enemies coming into the view will be automatically suspicious.<br><br>
+
+The final piece of the stealth gameplay rules was to make it so that a suspicious enemy, or an enemy that has seen the player once, will also automatically look above and below non-solid platforms, while a completely unalerted enemy doesn't.<br><br>
+
+A "rock" weapon was added, also after Lemon64 discussions, that the player has an infinite supply of. These can be used to deliberately make small noises and distract enemies, but owing to the rule above, that can be actually turn out a very bad idea!<br><br>
+
+Next up was a small detour back to the soundtrack. There were now the long level songs, and the bossfight tunes, yet something was missing. Hessian used to load a short gameover tune whenever you died, which meant a loading break (not good!). Therefore MW ULTRA turns back to what Metal Warrior 4 already does: every level has also its unique gameover theme. There ended up being 12 of them, lasting only a few seconds each. Several use the same chord progression as the "death theme" from the first Metal Warrior game: Am - A# - Am (transposed according to the key of the level song). One or two of them should never be heard, as it should be impossible to die in some of the levels, but for the sake of completeness they're still there.<br><br>
+
+For a long time, dying in the test version meant reloading. But finally the game gained the pause / gameover menus similar to Hessian and Steel Ranger, and restarting from last entered area became possible. The final game will need some designing in this matter, it might be useful to have enemy-free "save rooms" which checkpoint the player, followed by longer stretches of enemy-filled areas that don't checkpoint. This would avoid respawning in the middle of trouble, with health down to the last recharging segment.<br><br>
+
+MW ULTRA will have light RPG elements similar to Metal Warrior 3: defeating enemies or completing other tasks will fill the experience bar on the bottom right of the screen. Once the bar is full, a "skill point" for upgrading the player character's skills is awarded. The skills will give damage bonuses, speed up weapon reloading, improve jumping and climbing abilities, allow for more carried weapons / ammunition, and improve damage resistance. Implementing both the XP gain and skill effects was straightforward enough, while the combined skill upgrade and stats screen (shown below) was more work.<br><br>
+</p>
+
+<p align="center">
+<img src="wip/skillmenu.gif" align="center" alt="Skill upgrade menu"><br><br>
+</p>
+
+<p align="justify">
+After the skill menu, the final thing to work on before writing this update was to prototype the NPC conversation system. In Steel Ranger this was done in the project's final stages, and it led to ugly spaghetti code and even bugs. Doing it earlier this time allowed for a more controlled approach. The plan is to show the speaking character's portrait in the bottom left of the screen, in addition to the familiar speech bubble icon:<br><br>
+
+<p align="center">
+<img src="wip/dialogue.gif" align="center" alt="NPC dialogue test"><br><br>
+</p>
+
+<p align="justify">
+Showing the portrait wasn't completely straightforward. The portrait is a "logical sprite" that consists of several sprites, and rendering it in a fixed position on the screen is easy enough. But since the game assumes that all sprites are world objects that move along with the scrolling, a separate bit was needed for the sprite multiplexer to indicate that this is an overlay sprite, don't scroll it! This was actually stuffed into the sprite color byte, where there was still one bit free (color byte also controls sprite flickering, invisibility and X-expansion.)<br><br>
+
+A thing that recurred with all of the pause menu, skill upgrade screen and the conversation system was the need for a firebutton press to return to the game, but not yet initiate an attack by mistake. The previous games solved this by some ugly hacking of the joystick reading code, but utilizing the status bar / menu state machine, which already has states like "inventory," "pause menu" and "conversation" allowed a better solution this time: define an extra state which we call "resume", whose only purpose is to wait for releasing the fire button, before normal player character control (and attacks) resume.<br><br>
+
+Next up: some more fun with code size-optimization. Substantial gains are likely not possible at this point though... Then it's off to NaNoWriMo 2018, which might be partially used for working on the game's detailed script, and possibly, also starting the game world pixeling work at last!<br><br>
+
+In the meanwhile, here are the YouTube videos from the last two months, showing stealth and close combat:<br><br>
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/PsR9M2cAIn4" frameborder="0"></iframe><br><br>
+</center>
+
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/rfC5m7YlW8c" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
 <p align="justify">
 <b>2nd August 2018:</b><br><br>
 Now also the shorter bossfight and "danger" songs of the soundtrack are done. These 7 additional tunes were expertly composed by Kamil Wolnikowski (Jammer), so now the soundtrack totals 23 subtunes.<br><br>
 
 The initial set of weapons for the game are complete as well, adding up to 15 of them with the grapple gun counted in.<br><br>
 
-The disheartening part of implementing weapons, or any new features that go into the always-resident main part of the game, is seeing the code & data size grow. For weapons, there's much data to include: the weapon definition data including bullet speed, duration, damage, which sound effects to play for shooting and for reloading,
-the actor definitions for the bullets, the bullets' movement code (if special behavior is needed, such as the bouncing of grenades), the weapon sound effect data itself, and also the name texts of the weapons.<br><br>
+The disheartening part of implementing weapons, or any new features that go into the always-resident main part of the game, is seeing the code & data size grow. For weapons, there's much data to include: the weapon definition data including bullet speed, duration, damage, which sound effects to play for shooting and for reloading, the actor definitions for the bullets, the bullets' movement code (if special behavior is needed, such as the bouncing of grenades), the weapon sound effect data itself, and also the name texts of the weapons.<br><br>
 
-Therefore, after adding a bunch of new stuff, it's often beneficial to stand back and see whether the resident code & data could be reduced in size to compensate. In the best case some code doesn't need to be executed at all, leading to both size and CPU time reduction.
-Other times it's a tradeoff between memory use and execution speed. For example I know that by writing unnecessarily to the 40th (invisible) screen column, the screen redraw code could be reduced by almost half a kilobyte, at the expense of being slower due to the unnecessary writes. This might yet become in handy in a memory emergency.<br><br>
+Therefore, after adding a bunch of new stuff, it's often beneficial to stand back and see whether the resident code & data could be reduced in size to compensate. In the best case some code doesn't need to be executed at all, leading to both size and CPU time reduction. Other times it's a tradeoff between memory use and execution speed. For example I know that by writing unnecessarily to the 40th (invisible) screen column, the screen redraw code could be reduced by almost half a kilobyte, at the expense of being slower due to the unnecessary writes. This might yet become in handy in a memory emergency.<br><br>
 
 One of the first things to optimize this time was the sound effect format. The Miniplayer follows the same idea as the <a href="http://codebase64.org/doku.php?id=base:sound_fx_routine" target="_top">Prince of Persia C64 sound routine</a>, so that each sound effect frame starts with a bitmask byte,
 telling what further data to read & put into the SID registers this frame. However, in practice changing the waveform and frequency occurs most often. Ideally these should be optimized to not require a separate bitmask byte at all.<br><br>
@@ -210,7 +268,6 @@ Here's the end result captured on video:<br><br>
 </center>
 </p>
 <br><br><br>
-
 
 <p align="justify">
 <b>1st July 2018:</b><br><br>
