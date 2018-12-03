@@ -18,6 +18,81 @@
 </p>
 <font face="Arial" size="2">
 <p align="justify">
+<b>3rd December 2018:</b><br><br>
+The engine code for MW ULTRA has been open sourced on github as the <a href="https://github.com/cadaver/c64gameframework" target="_top">c64gameframework</a> project! This doesn't include any of MW ULTRA's content or game-specific code, but just the basics: scrolling, sprites, resource loading, sound playback, and helper routines including movement and collision.
+<br><br>
+
+The project includes an intentionally simple sidescroller game example, with a player character, shooting, powerups to pick up, enemies, moving between
+areas, and in-memory checkpoint save & restore. Sprite assets & music are taken from Steel Ranger.<br><br>
+
+As MW ULTRA's release is still a long time away, it's good to contribute the engine code + editors already, in the hope they will be useful or inspiring. Compared to earlier Covert Bitops games, the main differentiating features are the concept of logical sprites (+ graphical collision bounds editing), and the flexible screen redraw-based scrolling, which saves CPU time for screen areas where the char colors don't change.<br><br>
+
+After the last WIP update, the engine gained one more feature: mastering also to GMod2 cartridge format. This gives the option of potentially also publishing MW ULTRA on cartridge. C64gameframework's example also demonstrates mastering to all of the supported formats: .d64 image, EasyFlash .crt and GMod2 .crt.<br><br>
+
+This practically means that four variants of the game's loader code must exist:<br><br>
+
+- Fastloader, using custom drivecode for 1541, 1571 (almost same as 1541), 1581 and CMD FD/HD<br>
+- Fallback drive loader using Kernal routines, used for IDE64, devices like SD2IEC, and "fast drive emulation"<br>
+- EasyFlash cart ROM loader. Also includes flash save support using the EasyAPI<br>
+- GMod2 cart ROM loader. Implements save support using the 2KB EEPROM<br><br>
+
+For disk support, the two first variants of the loader code are both included in the "LO" (loader) file that is read immediately after boot, but only one is left in the memory after initialization. The EasyFlash & GMod2 cartridge ROM loading code is rather similar, only the data layout on the cart differs due to different banking ($8000-$9fff and $a000-$bfff for EasyFlash, $8000-$9fff only for GMod2). Cartridge initialization after reset and saving differ much, though.<br><br>
+
+The game main part relies on the loader routine jump addresses always being the same, and the loader always occupying the same memory space. In practice the loader API is extremely simple, as there are only three routines actually to do with file I/O:<br><br>
+
+- Open a file<br>
+- Read a byte from opened file<br>
+- Save a file<br><br>
+
+The disk loader was written first, so it sets the amount of available space for all of the loader variants. It would be possible to have the memory layout
+different in the cart builds, but having it the same speeds up the build process, as the main part and loadable code (which depends on the memory layout of the main part) only have to be compiled once. It also makes testing more reliable, as the amount of free memory in the same ingame situation will be the same across the disk / cart builds.<br><br>
+
+In practice, the cart loading code is extremely simple: just choose the correct bank, and copy bytes to the "sector buffer" in RAM at $0200-$02ff, similar to how the fastloader operates. Cart saving code is more involved, though.<br><br>
+
+On EasyFlash, cart space used for saving must be erased in 64 KB sectors. This sets all the bits in the sector to "1," and they can be changed to 0's while writing, but not back without erasing again. To reduce wear on the flash memory and speed up saving, it's a good idea to use up the whole 64KB sector before starting over and erasing it again.<br><br>
+
+The EasyFlash save file system uses a 512 byte "directory" in the beginning of the save sector to mark allocations (256 bytes for file numbers per page, then 256 bytes for number of bytes in the file's last page). When a save file is overwritten, the old file must be marked as obsolete. This is based on an idea demonstrated in Per Olofsson's Ultima 4 Remastered EasyFlash I/O code: because writing a $00 byte is always legal without having to erase, it's used to mark obsolete file entries in the save directory. Similarly, $ff (the initial value of bytes in a freshly erased save sector) marks a free page.<br><br>
+
+When it's time to erase the save sector, the latest versions of all save files currently on the cart must be backed up to RAM, under the Basic ROM region ($a000-$bfff.) This presents an additional logic problem: there necessarily isn't enough free RAM for this when the game is running! Therefore the save routine must call into the game main part and ask it to deallocate (purge) loaded resource files, until there is enough free memory. The EasyAPI code that does the actual flash ROM interfacing also occupies a fixed RAM location, adjacent to where the music is located, so there is an additional rule that while saving, the currently loaded music must not take too much memory! In MW ULTRA this is not a problem, as saving always happens in the title screen.<br><br>
+
+For GMod2 the save support implementation is thankfully much simpler, as the EEPROM does not need to be erased, but can be written to word-by-word (not byte-by-byte!) Therefore the save directory format can also be different: just 3 bytes per file entry (file number, size lowbyte, size highbyte.) However, there's still the trouble of memory in the loader area running a little short, so the stack and the sector buffer are reused creatively during the save. But the GMod2 save routine does not need to deallocate game resource files.<br><br>
+
+The fastloader save and the cart saves operate on the same principle, that a specific save file must always be the same size. In MW ULTRA (same as in Hessian & Steel Ranger) this is not a problem, as there is only the configuration file, a "savegame list" which contains summary information of all saves, and finally the save files themselves, and their sizes never change. On disk, space is preallocated so that the fastloader doesn't need to handle allocation. However, the game must be prepared for the fact that on cart initial save files will not exist, so for example the configuration must be able to use valid defaults.<br><br>
+
+Writing the cart images is done using two separate utilities, one for EasyFlash and one for GMod2. You can take a look at both cart loaders, and the cart writing utilities in the c64gameframework source tree:<br><br>
+
+Boot code & loaders:<br>
+<a href="https://github.com/cadaver/c64gameframework/blob/master/efboot.s" target="_top">efboot.s</a>
+<a href="https://github.com/cadaver/c64gameframework/blob/master/gmod2boot.s" target="_top">gmod2boot.s</a><br><br>
+
+Cart writing utilities:<br>
+<a href="https://github.com/cadaver/c64gameframework/blob/master/tools/makeef.cpp" target="_top">makeef.cpp</a>
+<a href="https://github.com/cadaver/c64gameframework/blob/master/tools/makegmod2.cpp" target="_top">makegmod2.cpp</a>
+
+Also, if you're interested of cartridge coding yourself, here are the references used during development:<br><br>
+<a href="http://skoe.de/easyflash/files/devdocs/EasyFlash-ProgRef.pdf" target="_top">EasyFlash Programmer's Guide</a><br>
+<a href="https://github.com/luigidifraia/easyflash" target="_top">EasyFlash examples repository by Luigi Di Fraia</a><br>
+<a href="https://github.com/MagerValp/u4remastered/blob/master/docs/ULoadEF.txt" target="_top">Ultima IV EasyFlash Loader by Per Olofsson</a><br>
+<a href="http://wiki.icomp.de/wiki/GMod2" target="_top">GMod2 programming information</a><br><br>
+
+Now, as the NaNoWriMo 2018 month is over, and the engine code is released, it's time to get back into serious MW ULTRA development, starting with game world pixeling at last! As a summary, here's what's finished for MW ULTRA at this point:<br><br>
+
+- Game engine code<br>
+- Loading sequence & title screen<br>
+- Player animations<br>
+- Weapons, combat & stealth mechanics<br>
+- Standard enemy & pathfinding AI<br>
+- Music & 1st pass of sound effects<br>
+- Story (excluding detailed dialogue)<br><br>
+
+Finally, here's a video of the c64gameframework example game in action:<br><br>
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/0s8ZaUIHJcI" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>19th October 2018:</b><br><br>
 Some time has passed since last update, and the game has also progressed much in the meanwhile, bringing the game's always-resident engine code to completion for now.<br><br>
 
