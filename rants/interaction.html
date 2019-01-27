@@ -126,11 +126,10 @@ animation, and then a weapon sprite.
 
 Now the engine just calls a routine which is supposed to produce sprites for the
 actor. That routine can then do whatever is necessary to achieve that. Using
-the previous "grapple rope" example, the actual "actor" is the hook at the end
-of the rope. When called, the hook's render code calculates the distance between 
-itself and the player, calculates the angle (requires square root), and finally 
-proceeds to draw a sufficient amount of rope sprites using the correctly-angled 
-sprite frame.
+the previous "grapple rope" example: when called, the grapple hook's render code
+calculates the distance between itself and the player, calculates the angle 
+(requires square root), and finally proceeds to draw a sufficient amount of rope 
+sprites using the correctly-angled sprite frame.
 </pre>
 </body>
 </html>
