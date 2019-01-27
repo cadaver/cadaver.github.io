@@ -1,0 +1,151 @@
+<meta name="viewport" content="width=768">
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Tile map data compression by Cadaver
+------------------------------------
+
+0. Introduction
+
+Usually compressing level data in C64 games is a simple concept: just run your
+data through your favorite compressor, for example Exomizer, then decompress
+during runtime.
+
+Of Covert Bitops games, Steel Ranger and the upcoming MW ULTRA need to do things
+in a little more complicated manner due to utilizing small 2x2 char tiles, and
+structuring their levels to multiple smaller areas / rooms (similar to Metroid
+games.) The uncompressed map data can be large: Steel Ranger's 730 screens make
+for 135KB bytes of tilemap data, which would almost fill the diskside by itself.
+
+Handling large tilemaps then has three potentially conflicting requirements:
+
+- Small size on disk
+- Small size in memory when loaded, so that there is room for other resources
+- Area transitions should be as fast as possible
+
+
+1. The approaches
+
+Typically, best compression ratio for disk storage is achieved by just
+compressing each level's tilemap data in one go with Exomizer. But then the
+question becomes, what to do with the tilemap data once the level has been
+loaded?
+
+If it's also uncompressed in one go, the amount of runtime memory required can
+be unmanageably large. For example the main "city" level in Steel Ranger would 
+be almost 12KB uncompressed. This would take a heavy chunk out of the dynamic 
+allocation area, which also needs to be shared by sprites and loadable code.
+
+Therefore it seems necessary to be able to uncompress only the currently entered
+area into a separate "scrolling buffer", while the rest remain compressed. The 
+obvious solution is to invoke Exomizer for each area separately (and this data
+is loaded from the disk as-is), however doing this can not take advantage of 
+compression of similar byte sequences across areas, and also adds overhead of
+the Exomizer encoding header, unless all the areas of a level are compressed 
+with the same encoding parameters, so that the header can only be stored once.
+
+To address these issues, both Steel Ranger and MW ULTRA devise an intermediate
+compressed tilemap format for storing in memory. On disk, this format is further
+compressed by Exomizer per level, taking advantage of cross-area compression and
+requiring only one Exomizer header.
+
+The intermediate format is decompressed to uncompressed tilemap data when
+entering each area. Because this involves no bitstream manipulation, just bytes 
+stored one after another, the decompression routine runs faster than Exomizer.
+
+The intermediate format needs to be reasonably efficient for in-memory storage,
+but it should also compress well further.
+
+
+2. Steel Ranger data format
+
+The "cave" levels of Steel Ranger contain a large, repeating background pattern
+consisting of several tiles. Storing it as part of the tilemap would make the
+compressor's job much harder and increase the diskspace requirement, so it's
+replaced by the world editor with empty tiles, and recreated in code instead.
+
+After this modification, the data is just a straightforward run-length-encoding
+compression, where byte values $00-$fe are the literal tile numbers and $ff is
+an escape code that indicates a RLE sequence:
+
+$ff,length,tile
+
+End of data is marked with a zero-length RLE run:
+
+$ff,$00
+
+The tile $ff is not used in the map data itself.
+
+The RLE format does not yield very good compression, for example the city level
+data goes from about 12KB to a little below 8KB. However, it was good enough
+for shipping Steel Ranger, as the most important hurdle was lack of diskspace,
+and Exomizer would be able to compress the RLE data well. The same level is only
+a little over 3KB on disk.
+
+See the RLE decompression implementation <a href="https://github.com/cadaver/steelranger-demo/blob/master/level.s#L353" target="_top">here</a>.
+
+
+3. MW ULTRA data format
+
+For MW ULTRA, multiple approaches were tested before arriving with the final.
+Its map data is somewhat different to Steel Ranger; being a game set mostly in
+urban environments, there are no repeating "cave wall" textures, but instead
+there can be repeating sequences across areas (building windows, the pavement)
+so these should compress well without needing to be repeated.
+
+The initial approach was to just compress each area with Exomizer, and
+decompress from memory when entering. This keeps the engine code simple, and
+runtime memory use is good, but size on disk is larger than it needs to be.
+
+Furthermore, the scrolling / screen redraw routine requires the tilemap data
+interleaved at 2-byte intervals, as indexing of the map data and the screen need
+to match for code efficiency reasons. A row of tile $01 followed with a row of
+tile $02 below would therefore be stored as $01,$02,$01,$02,$01,$02... This 
+makes the compressor's life harder.
+
+It's however easy to store the data on disk uninterleaved, and interleave after
+decompression. This gave somewhat better results.
+
+But more approaches needed to be explored, including collecting level data to
+4KB chunks, and compressing each of them separately with Exomizer. These 4KB
+chunks could be decompressed into the 4KB sprite cache under the IO area (as 
+sprites can always be recreated from packed data.) This yielded good 
+compression, but complicated the engine code and slowed down area transitions.
+
+Finally MW ULTRA got its own, different compressed tilemap format.
+
+It no longer uses the tile number $ff as an escape code for sequences, but
+instead sorts tiles based on usage, so that part of the byte range can be
+used for dictionary sequences and RLE sequences. The encoding becomes:
+
+$00-$cf        Literal tiles $00-$cf
+$d0            End of data
+$d1,tile       Escape code followed by literal tile $d0-$ff (infrequent)
+$d2-$e7,offset Dictionary sequence length 3-24, offset max. 256 bytes backward
+$e2-$ff,tile   RLE sequence length 3-24, followed by tile to repeat
+
+The decompression code can be seen <a href="https://github.com/cadaver/c64gameframework/blob/master/level.s#L361" target="_top">here</a>.
+
+It handles interleaving directly during the decompression, however accessing
+the interleaved data as source for dictionary sequences would be difficult, so
+it also stores the last 256 bytes of output in a ring buffer in screen memory.
+Because the screen is blanked during area transition, no visible trash can be
+seen.
+
+The corresponding compression code is included in the <a href="https://github.com/cadaver/c64gameframework/blob/master/tools/worlded3.cpp#L5115" target="_top">world editor</a>.
+
+The story doesn't quite end here: after making the map data itself as small
+as it could be, the next step was to shuffle the tile numbers so that the
+tile definitions would compress as good as possible too. The tile numbers are
+never referred to in e.g. game code, so it doesn't matter what they are.
+
+The tile definitions are stored in 4 256-byte arrays: one for top left chars, 
+followed by top right, bottom left, and bottom right. By assigning sorting keys 
+to the tiles based on the chars they use, similar tiles are grouped together and 
+the definitions compress better.
+</pre>
+</body>
+</html>

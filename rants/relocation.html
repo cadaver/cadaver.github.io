@@ -1,0 +1,152 @@
+<meta name="viewport" content="width=768">
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Runtime code relocation by Cadaver
+----------------------------------
+
+0. Introduction
+
+Starting from Metal Warrior 4, Covert Bitops games have loaded some code during
+runtime, often to implement title screens or story scripting, or enemy logic
+that is not required at every point in the game. This way, the amount of all-
+time resident code in the "main load" or "engine" is kept smaller.
+
+Metal Warrior 4 and Hessian both employed a 2 KB fixed-address buffer for the
+loadable code; only one such code chunk would be in memory at once and would
+always be fully overwritten when the next chunk was loaded. In this case, the
+code in each chunk could be pre-assembled to the fixed address.
+
+To avoid having to define fixed maximum sizes for various data and to be able
+to utilize free memory better, Hessian already used dynamic memory allocation
+for resource data like level maps and sprites, but from Steel Ranger onward,
+also code is considered a dynamically allocated resource. Because now the code
+load address is not known beforehand, or previously loaded code can move in the
+memory as resource chunks are loaded or unloaded, runtime code relocation
+becomes necessary.
+
+
+1. Relocation algorithm
+
+The principle of relocation is simple, as long as some limitations are kept.
+
+It only requires recognizing 3-byte long instructions, which contain a 16-bit
+absolute address. If the address is a reference to the loadable code itself, or 
+data it has included in the same resource chunk, it must be relocated. Loadable 
+code may also access the variables and routines of the resident engine code, or 
+the C64's hardware registers, and these accesses need to be left alone. Handling 
+this properly requires just a memory range check: if the address is within the 
+dynamic allocation area, it should be relocated.
+
+There must also be a way to detect the end of the code. The BRK instruction
+($00) was chosen for simplicity.
+
+When a new piece of loadable code is loaded into memory for the first time, it
+uses the addresses it was initially assembled to. In Covert Bitops games $8000 
+is used, which is guaranteed to be inside the dynamic allocation area.
+
+The relocation algorithm becomes:
+
+- Get next instruction, until BRK encountered
+- Is it a 3-byte long instruction?
+- If yes, check the address. Is it within the dynamic allocation area?
+- If yes, add a delta value to the address to match the code's current load 
+  address
+
+
+2. Limitations
+
+The code to be relocated must be unambiguous, ie. tricks that use for example
+the BIT instruction to skip the next instruction can not be allowed, as this 
+gives multiple interpretations of the instructions.
+
+Including data tables that contain addresses (either 16-bit, or separated into
+8-bit low and high tables) is a problem, as they can not be detected for 
+relocation by just going through code. The algorithm simply chooses to not 
+support this.
+
+This can be circumvented somewhat, as the dynamic allocation system supports 
+querying the current address of any "object" inside a resource chunk. The
+loadable code can define extra objects it needs, for example text strings, that
+it can use when executing.
+
+In Covert Bitops games, loadable code is handcrafted in assembly to correspond 
+to the resource chunk format, as some extra data like the total data size and
+number of resource objects are needed. See examples from the <a href="https://github.com/cadaver/steelranger-demo/blob/master/script00.s" target="_top">Steel Ranger demo</a>
+source code and the <a href="https://github.com/cadaver/c64gameframework/blob/master/script00.s" target="_top">c64gameframework example game</a>.
+
+
+3. Optimizations
+
+A naive implementation would use a 256-byte table to store the length of every
+instruction.
+
+In practice, regularities in the legal instruction set can be observed. 
+Instructions ?c - ?f are always 3 bytes, and instructions ?4 - ?7 are always 2 
+bytes. For the remaining instructions, 4 lengths can be packed into one byte, so 
+the final table becomes only 32 bytes.
+
+
+4. The code
+
+This is adapted from <a href="https://github.com/cadaver/c64gameframework/blob/master/file.s#L134" target="_top">file.s</a> in the <a href="https://github.com/cadaver/c64gameframework">c64gameframework</a> project. Two zeropage 
+pointers (ptr - the code to relocate, and relocDelta - the relocation offset to 
+add) are used, and the instruction length table is below the code.
+
+CodeRelocLoop:  ldy #$00
+                lda (ptr),y                     ;Read instruction
+                beq CodeRelocDone               ;BRK - done
+                lsr
+                lsr
+                lsr
+                bcc LookupLength
+                and #$01                        ;Opcodes xc - xf always 3 bytes
+                ora #$02                        ;Opcodes x4 - x7 always 2 bytes
+                bne HasLength
+LookupLength:   tax
+                lda (ptr),y
+                and #$03
+                tay
+                lda instrLenTbl,x               ;4 lengths packed into one byte
+DecodeLength:   dey
+                bmi DecodeLengthDone
+                lsr                             ;Shift until has the wanted
+                lsr
+                bpl DecodeLength
+DecodeLengthDone:
+                and #$03
+HasLength:      cmp #$03                        ;3 byte long instructions need
+                bne NotAbsolute                 ;relocation
+                ldy #$02
+                lda (ptr),y                     ;Read absolute address highbyte
+                cmp #>fileAreaStart             ;If not reference to self, skip
+                bcc NoRelocation
+                cmp #>fileAreaEnd
+                bcs NoRelocation
+                dey
+                lda (ptr),y                     ;Add relocation offset to the
+                adc relocDelta                  ;address
+                sta (ptr),y
+                iny
+                lda (ptr),y
+                adc relocDelta+1
+                sta (ptr),y
+NoRelocation:   lda #$03
+NotAbsolute:    clc                             ;Proceed to next instruction
+                adc ptr                         ;(length of current in A)
+                sta ptr
+                bcc CodeRelocLoop
+                inc ptr+1
+                bne CodeRelocLoop
+CodeRelocDone:  rts
+
+instrLenTbl:    dc.b $99,$99,$9a,$dd,$9b,$99,$9a,$dd
+                dc.b $99,$99,$9a,$dd,$99,$99,$9a,$dd
+                dc.b $99,$99,$9a,$dd,$9b,$99,$9a,$dd
+                dc.b $99,$99,$9a,$dd,$99,$99,$9a,$dd
+</pre>
+</body>
+</html>

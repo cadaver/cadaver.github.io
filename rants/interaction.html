@@ -1,0 +1,116 @@
+<meta name="viewport" content="width=768">
+<html>
+<head>
+<title>Covert Bitops C64 page</title>
+</head>
+<body bgcolor="#646464" text="#a0fca0" link="#a0fca0" vlink="#a0fca0" alink="#ffffff">
+<pre>
+Interaction patterns in Covert Bitops games by Cadaver
+------------------------------------------------------
+
+0. Introduction
+
+This is a mostly unstructured rant that explores some common patterns related
+to game object (aka "actor") interaction and code optimization in Covert Bitops
+games.
+
+
+1. Actor transformation
+
+This is already explored in the <a href="dissect.html" target="_top">Escape From New York dissected</a> rant. Actors
+in the games are for the most part interchangeable and it is legal for them to 
+transform to another actor type during gameplay.
+
+A typical example would be an enemy transforming into an explosion when defeated.
+
+This could also be used to implement special-case sequences where the player
+actor transforms into something else, or becomes different in behavior.
+Particularly when combined with loadable code, it allows to keep the resident
+engine code footprint smaller, by keeping only the often-used behavior in the
+"base" player actor.
+
+For Hessian there was an experiment where the player would momentarily take 
+control of a small tank-like enemy, using this mechanism. Unfortunately it had 
+to be scrapped.
+
+
+2. Actor spawning
+
+This is when an actor creates new actors during its lifetime. This can typically
+be used for "particle"-like effects such as smoke trails, or a larger explosion
+that consists of several explosions appearing in a timed sequence.
+
+Because the maximum number of actors onscreen in a C64 game is usually limited
+by using fixed-size arrays, some care needs to be taken to not disturb the
+important gameplay, such as the player being able to shoot more bullets during 
+the effect. This can be achieved by reserving only some actor indices for the
+effects, or counting the number of actors already onscreen, and only proceeding
+if there's enough free.
+
+
+3. Control override
+
+It's a good idea to keep the player in control of the player character for as
+much of the time as possible.
+
+However, for some short sequences it can be useful to be able to override the
+player controls. This can be as simple as feeding a virtual "joystick controls"
+value into the player actor update routine, instead of the actual joystick
+input.
+
+The simplest example is the conversations in Hessian and Steel Ranger: the game
+keeps running, but the player actor doesn't move, as zero is being fed to the
+joystick controls value.
+
+This is also how enemy AI is implemented from Metal Warrior 4 onward; the AI
+feeds joystick control values to the enemy update. It's also how the "tank 
+sequence" described above would have worked, while keeping the controls
+familiar.
+
+
+4. Update / affect another actor
+
+Another mechanism of control override is when some other actor takes over the
+player actor movement / physics either completely or partially.
+
+Metal Warrior 4 and Steel Ranger implement "lift platforms" in this manner:
+if the player actor (or some other actor) is not airborne and is colliding
+with the platform, the platform applies its own vertical velocity to the
+actor, giving the impression of riding along the lift.
+
+There was a late-stage bug that almost got left in Steel Ranger: initially
+the mines that the player could lay down in wheel mode would not be affected,
+and would stay hanging in the air. This was due to over-eager code optimization
+that only considered the player, enemies and items for riding on the lift.
+
+A different kind of control takeover happens in the "grapple gun" mechanic
+that will appear in <a href="https://www.youtube.com/watch?v=pz97G0Nc_VY" target="_top">MW ULTRA</a>:
+
+When the rope connects, the player actor is placed in an inactive state
+("sitting" at the end of the rope) and the rope hook actor handles all the
+movement, collision and controls, until detached again.
+
+
+5. Data set reduction
+
+In a scrolling game, a typical problem is how to handle activation of actors as
+they scroll into the view, and deactivate them once they leave.
+
+Somewhat similar is also to determine if the player actor is close to an
+interactable environment object: there can be a large number of them in the
+complete level data, consuming much CPU to go through all of them.
+
+In Steel Ranger, whenever a new area is entered, the game checks which actors
+and objects of the level belong to the current area, and builds lists for them.
+These lists are then used for the per-frame activation and interaction checks.
+
+Another mechanism is to simply process Y amount of objects each frame from a
+total of X. This can however induce a noticeable delay, for example an actor
+seemingly appearing "out of thin air" by spawning late.
+
+It's also possible to build acceleration structures for these checks, however 
+this can mean that the actors can not move freely, or at least, when an actor is
+deactivated, its exact last position can not be remembered.
+</pre>
+</body>
+</html>
