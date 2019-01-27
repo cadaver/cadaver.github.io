@@ -92,7 +92,7 @@ the final table becomes only 32 bytes.
 
 4. The code
 
-This is adapted from <a href="https://github.com/cadaver/c64gameframework/blob/master/file.s#L134" target="_top">file.s</a> in the <a href="https://github.com/cadaver/c64gameframework">c64gameframework</a> project. Two zeropage 
+This is adapted from <a href="https://github.com/cadaver/c64gameframework/blob/master/file.s#L134" target="_top">file.s</a> in the <a href="https://github.com/cadaver/c64gameframework">c64gameframework</a> project. Two zeropage
 pointers (ptr - the code to relocate, and relocDelta - the relocation offset to 
 add) are used, and the instruction length table is below the code.
 
@@ -145,8 +145,8 @@ CodeRelocDone:  rts
 
 instrLenTbl:    dc.b $99,$99,$9a,$dd,$9b,$99,$9a,$dd
                 dc.b $99,$99,$9a,$dd,$99,$99,$9a,$dd
-                dc.b $99,$99,$9a,$dd,$9b,$99,$9a,$dd
-                dc.b $99,$99,$9a,$dd,$99,$99,$9a,$dd
+                dc.b $aa,$99,$da,$dd,$aa,$99,$9a,$dd
+                dc.b $aa,$99,$9a,$dd,$aa,$99,$9a,$dd
 </pre>
 </body>
 </html>
