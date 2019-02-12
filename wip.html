@@ -18,6 +18,168 @@
 </p>
 <font face="Arial" size="2">
 <p align="justify">
+<b>12th February 2019:</b><br><br>
+Time flies! But MW ULTRA has also progressed significantly (if sometimes unpredictably) in the meanwhile.<br><br>
+
+The world pixeling is well underway, with the game's city streets (AKA the main "hub" area) complete, and also about half of the city building insides done. The game contains two bars / nightclubs you can visit, but something was missing - they should have their distinct musical themes! So, two more songs were composed.<br><br>
+
+The game's loading sequence is also very likely final now, with the loading picture fading in / out, and after loading there is a menu for reading the game's manual, or proceeding into the actual game. For disk, the disk side change happens at this point and is the only one needed (similar to Metal Warrior 4), unless the game grows so much to actually need game content on both disk sides.<br><br>
+
+December - January also saw the need to consider the best game world storage data format. It should preferably be small on disk, small when loaded into memory, and fast to decompress into the actual scrollable data used by the game. The initial format was just compressing each room or area individually with Exomizer, but that wasn't yet optimal. The results of the investigation were somewhat surprising, and in the end a new custom lightweight compression format was devised. It's described in the new "rant" published a little while ago - <a href="rants/tilemap.html">Tile map data compression</a> - and the idea is that this intermediate format responds well to further Exomizer compression.<br><br>
+
+Speaking of Exomizer, the game now uses Exomizer 3 for better loading performance - the new decompressor is significantly more efficient in the bitstream manipulation.<br><br>
+
+In between world pixeling and some bugfixing, it also occurred that the actor / world collisions on sloped ground weren't 100% solid yet. This was particularly noticeable when throwing grenades against stairs. Both Hessian and Steel Ranger employ somewhat of a hack - when the actor is traveling downward toward a slope and the "landing" is to be checked, they add the absolute horizontal velocity to the vertical velocity for the check. This prevents glitching through the slopes, but can cause too early landing. Initially MW ULTRA inherited this code.<br><br>
+
+But a better approach is to move the actor first horizontally, checking for a slope crossing, then vertically, again checking for crossing. If the crossing is horizontal, the physics / collision routine can report a "wall hit" just like when hitting an actual wall, and for example a grenade would then bounce back. Writing the code this way was a success, and the main physics routine also got a little bit faster due to eliminating redundant checks for world collision data.<br><br>
+
+However - it grew in size.<br><br>
+
+This prompted a few somewhat mad days of code size optimization, with the aim of at first trying to get the code back to the original size, of course without losing functionality. However, I didn't stop there, and in the end, over 200 bytes were shaved off from the engine code, which I honestly didn't think to be possible at this point. Some observations:<br><br>
+
+- If there are separate pieces of code doing almost the same thing, try to combine, if just performance considerations permit. For example, the sprite multiplexer has a loop which is executed for every sprite past the first 8. It copies the sprite variables to sorted arrays for the multiplexer IRQ, and also builds a list of IRQs that need to be happen in vertical order. This was executing in two separate sub-loops: "find the first sprite of IRQ" and "find the rest of the sprites for the IRQ." Combining these activities yielded a nice code reduction, with a minimal performance loss of having to check a zeropage flag using a BIT instruction.<br><br>
+
+- Self-modifying code isn't always the shortest, due to the absolute writes that take 3 bytes per instruction. Several dynamic jumps were converted from selfmodifying to using a zeropage indirect jump instead. However, a JSR cannot be converted this way.<br><br>
+
+- Sometimes reorganizing data or the meaning of variables allows shorter code. For example, Ian can do a high punch (FIRE+UP) or a low punch (just FIRE.) Originally the "attack state numbers" for these were high punch = 6 and low punch = 7. But reversing these so that high punch is 7 instead allows to LSR the joystick control bits, so that UP ends up in the carry flag, and then do an ADC instruction to determine the new attack state without any branching.<br><br>
+
+- In a similar vein, the code for spawning bullets or other actors was expecting a 16-bit offset in world coordinates for both X and Y directions. This offset is produced by running the actor draw code in a "fake" manner without producing actual sprites for display. It operates on 8-bit pixel coordinates, which are expanded to 16-bit after the draw code has finished executing. But turns out it's more efficient to keep the spawn offset in 8-bit pixel space until the very end, when the new actor's final world coordinates are calculated and set. This practically reduced code size in every case where actor spawning was being handled.<br><br>
+
+- Sometimes subroutines just need to be used more efficiently. Case in point, drawing health bars, which could be modified to (mis)use scorepanel text printing routines. The original unoptimized code does its own drawing to the screen & color RAM instead:<br><br>
+
+<pre>
+        ; Draw a three-segment health bar
+        ;
+        ; Parameters: A value, X position, Y color
+        ; Returns:
+        ; Modifies: A,zpSrcLo
+
+DrawHealthBar:  sta zpSrcLo
+                jsr DHB_Segment
+                jsr DHB_Segment
+DHB_Segment:    tya
+PanelRowAccess3:sta colors+SCROLLROWS*40,x
+PanelRowAccess4:sta colors+SCROLLROWS*40+1,x
+PanelRowAccess5:sta colors+SCROLLROWS*40+2,x
+PanelRowAccess6:sta colors+SCROLLROWS*40+3,x
+                lda zpSrcLo
+                cmp #9
+                bcc DHB_FirstCharOK
+                lda #8
+DHB_FirstCharOK:sta panelScreen+SCROLLROWS*40,x
+                inx
+                lda zpSrcLo
+                sec
+                sbc #7
+                jsr DHB_MiddleChar
+                sbc #15
+                jsr DHB_MiddleChar
+                sbc #22
+                bcs DHB_LastCharOK
+                lda #0
+                sec
+DHB_LastCharOK: adc #19-1
+                cmp #28
+                bcc DHB_LastCharOK2
+                lda #27
+DHB_LastCharOK2:sta panelScreen+SCROLLROWS*40,x
+                inx
+                lda zpSrcLo                       ;Decrement total value for next segment
+                sec
+                sbc #30
+                bcs DHB_ValueUpdateOK
+                lda #0
+DHB_ValueUpdateOK:
+                sta zpSrcLo
+                rts
+DHB_MiddleChar: bcs DHB_MiddleCharOK
+                lda #0
+                bcc DHB_MiddleCharOK2
+DHB_MiddleCharOK:
+                adc #9-1
+                cmp #19
+                bcc DHB_MiddleCharOK2
+                lda #18
+DHB_MiddleCharOK2:
+                sta panelScreen+SCROLLROWS*40,x
+                inx
+                lda zpSrcLo
+                sec
+                rts
+</pre>
+
+The optimized routine modifies the char color first, does the drawing, then restores the color to the default white needed by all status texts. There is increased subroutine use, resulting in more CPU cycles, but drawing the bars is infrequent in any case (only when player's health or experience points change):
+
+<pre>
+        ; Draw a three-segment health bar
+        ;
+        ; Parameters: A value, X position, Y color
+        ; Returns:
+        ; Modifies: A,zpSrcLo
+
+DrawHealthBar:  sty PrintPanelColorValue+1
+                sta zpSrcLo
+                ldy #3
+DHB_SegmentLoop:jsr DHB_Segment
+                dey
+                bne DHB_SegmentLoop
+                iny
+                sty PrintPanelColorValue+1  ;Restore white color for text printing
+                rts
+DHB_Segment:    lda zpSrcLo
+                cmp #9
+                bcc DHB_FirstCharOK
+                lda #8
+DHB_FirstCharOK:jsr DHB_Char
+                sbc #7
+                jsr DHB_MiddleChar
+                sbc #15
+                jsr DHB_MiddleChar
+                sbc #22
+                bcs DHB_LastCharOK
+                lda #0
+                sec
+DHB_LastCharOK: adc #19-1
+                cmp #28
+                bcc DHB_LastCharOK2
+                lda #27
+DHB_LastCharOK2:jsr DHB_Char
+                sbc #30
+                bcs DHB_ValueUpdateOK
+                lda #0
+DHB_ValueUpdateOK:
+                sta zpSrcLo
+                rts
+DHB_MiddleChar: bcs DHB_MiddleCharOK
+                lda #0
+                bcc DHB_MiddleCharOK2
+DHB_MiddleCharOK:
+                adc #9-1
+                cmp #19
+                bcc DHB_MiddleCharOK2
+                lda #18
+DHB_MiddleCharOK2:
+DHB_Char:       jsr PrintPanelChar
+                lda zpSrcLo
+                sec
+                rts
+</pre>
+
+With the game engine optimized to good shape, now nothing should prevent just concentrating on the world pixeling. Until the next unexpected thing comes up :)<br><br>
+
+Here are two new videos, showing the grenade bounce after getting the new physics / collision code in, and an early visit into the Hades Club, familiar from the original Metal Warrior games. Its music uses dual filtered channels for a raw distorted sound, particularly on 6581.<br><br>
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/e2GG4YqD78g" frameborder="0"></iframe><br><br>
+</center>
+
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/xOlYA-h_bwE" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
+<font face="Arial" size="2">
+<p align="justify">
 <b>3rd December 2018:</b><br><br>
 The engine code for MW ULTRA has been open sourced on github as the <a href="https://github.com/cadaver/c64gameframework" target="_top">c64gameframework</a> project! This doesn't include any of MW ULTRA's content or game-specific code, but just the basics: scrolling, sprites, resource loading, sound playback, and helper routines including movement and collision.
 <br><br>
