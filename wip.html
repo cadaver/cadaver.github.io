@@ -18,6 +18,60 @@
 </p>
 <font face="Arial" size="2">
 <p align="justify">
+<b>15th July 2019:</b><br><br>
+
+The initial pass through the whole of MW ULTRA's world map is complete now! It's about 740 screens split over 21 tilesets and 30 level loads.<br><br>
+
+Though there are no enemies yet, creating the world meant also designing all movement related puzzles, making sure the movement and level pacing is OK, as well as placing lockers & containers for weapon / item pickups. When enemies and story are added, these might need further adjustments, and it might be nice to add some more secret areas, but the majority of the work should already be done.<br><br>
+
+But as it has turned out already, development of MW ULTRA is never straightforward, so world map editing is never just world map editing, but also making engine tweaks and fixing bugs.<br><br>
+
+Since the last update, MW ULTRA changed the data compressor again, to Doynamite by Johan "Doynax" Forsl&ouml;f. Its advantages are faster decompression, smaller code footprint, and less runtime variable space needed, at the disadvantage of slightly larger compressed data compared to Exomizer 3. Using Doynamite, the custom tile map storage format (written about in the last update) could be replaced with compressing each
+room / area individually, making the engine code yet smaller as the custom decompressor code could be removed. Doynamite also
+responds well to recompressing the collection of area datas to yield the final compressed level file, making it usually yet smaller on disk.<br><br>
+
+Pathfinding also needed a second rewrite. The previous algorithm stored bounding boxes of platforms, stairs and ladders for each room, and the AI code would head toward the closest one in the direction of the target. However, it needed quite a bit of storage space, and could make a
+wrong turn in some cases. Therefore, the levels now store "junctions" for each horizontal platform, to aid the AI in making decisions to turn left or right. The junctions include stair and ladder endpoints, dead ends, mantleable spots, and too high drops. Fingers crossed for not needing a third rewrite!<br><br>
+
+When creating the game world progressed, it became apparent that the game will need disk side changes during gameplay - boot / play sides like in Metal Warrior 4 aren't enough to fit all data in. The plan is to have a disk turn at about halfway through the game, with the common "city hub" level data shared on both disk sides to eliminate repeated turns.<br><br>
+
+Now that the game world is done, it's easier to reflect on the total amount of data and memory needed, and to make a sort of mid-project postmortem on the world data-related decisions.<br><br>
+
+- Overall, the redraw-based scrolling works well and keeps CPU use lower than traditional scrolling, however there are some "problem areas" when some levels have so much color changes, that the color-RAM scrolling optimizations aren't of much use. On NTSC machines time can be tight in these spots, and so the engine got a REU optimization path for scrolling in addition to C128 & SuperCPU turbo modes. In the REU scrolling mode,
+the original scrolling routines get patched over by code that writes each room / area to the REU memory on room changes, and as the screen scrolls, the REU DMA transfer is fired for each row to quickly rewrite the screen and color RAM.<br><br>
+
+- Since the scrolling needs chars arranged in a certain way to match the char code and color code (done automatically by the editor), making charset animations becomes errorprone as the char order changes when the tileset gets edited. It's best to write the charset animation code only after the tileset is final, however "final" is often relative.<br><br>
+
+- The physics / collision code requires using special tiles to mark the ends of slopes and slope crossings to the map. This speeds up collision checks, but is manual and errorprone, and should not be used again in further Covert Bitops games!<br><br>
+
+- The "realistic" setting places some constraints on the world design, practically each area should make sense as a place people (even if villains) could actually exist and work in! In practice this turned not a problem, or was even liberating, since it reduces the amount of design possibilities, similarly as the C64's limitations force the scope of the game smaller and manageable.<br><br>
+
+- As no further world interactions or movement modes will be added (unless it turns out to be something absolutely vital) it's easy to take inventory of the ideas that will remain unused. It looks like there will for example be no lift platforms as in Steel Ranger. One planned idea was to have movable objects like boxes for reaching some hard-to-reach areas, but that looks not to be required either. MW ULTRA is still a traditional disk-based game that needs to keep all the engine code in RAM, and one has to be mindful of its total size. Some more advanced ideas were a hacking minigame (as in the latest Deus Ex games) or even taking control of enemy units, but these will remain just ideas as well. Therefore, the core of the gameplay will remain traditional: movement / exploration, combat (close / ranged / stealth), and advancing the story through character interactions.<br><br>
+
+That last point prompted the thought that making a C64 game cart-only could be the "next step up", almost becoming another platform, since code could be executed out of the cart ROM directly, and compromises could almost always be made to favor code speed. For example, speedcode-based scrolling. The amount of player character movements or interactions would also be much less limited, with just the cart total size as the limit.<br><br>
+
+Naturally, MW ULTRA will be finished as planned, being able to run both from disk and cart.<br><br>
+
+The next step after the world map will be the enemies. In addition to just enemy sprite pixeling and behavior coding, the algorithm for spawning enemies needs to be decided on. There will certainly be enemies in fixed positions for each playthrough, but in addition it would be good to add some unpredictability, or enemies reppearing to places that were cleared already, for example the city streets. Care must just be taken to not overwhelm the player with constant respawning.<br><br>
+
+Until the enemy work gets well underway, there won't be more videos, but in the meanwhile here are the game world screenshots from along the way so far:<br><br>
+</p>
+
+<p align="center">
+<img src="games/mwultra.gif" align="center" alt="City upper level"><br><br>
+<img src="wip/city1.gif" align="center" alt="City lower level"><br><br>
+<img src="wip/stairwell.gif" align="center" alt="Apartment"><br><br>
+<img src="wip/rehearsal.gif" align="center" alt="Rehearsal space"><br><br>
+<img src="wip/tunnels.gif" align="center" alt="Utility tunnels"><br><br>
+<img src="wip/construction.gif" align="center" alt="Construction site"><br><br>
+<img src="wip/outside.gif" align="center" alt="Outside the city"><br><br>
+<img src="wip/condemned.gif" align="center" alt="Condemned building"><br><br>
+<img src="wip/logbridge.gif" align="center" alt="Wilderness"><br>
+</p>
+
+<br><br><br>
+
+<p align="justify">
 <b>12th February 2019:</b><br><br>
 Time flies! But MW ULTRA has also progressed significantly (if sometimes unpredictably) in the meanwhile.<br><br>
 
