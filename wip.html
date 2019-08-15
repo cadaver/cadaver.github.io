@@ -18,6 +18,36 @@
 </p>
 <font face="Arial" size="2">
 <p align="justify">
+<b>15th August 2019:</b><br><br>
+
+Enemy work for MW ULTRA is going on, along with bugfixes, minor AI adjustments and optimizations.<br><br>
+
+When one starts to work on the enemies seriously, AI routines get severely stresstested, and some odd behaviors stand out. For example, the player would occasionally get noticed even when in cover, if an enemy was approaching from the left and the player was behind cover, also facing left. This was a simple logic mistake, easily fixed once detected, but also easily missed if only using straightforward frontal attacks on enemies when testing.<br><br>
+
+How enemy spawning works got implemented. Spawn points are to be placed into the levels with the world editor. These are item actors with an illegal type, that will not be put onscreen as actual items. Instead, they're processed on each area change, and create an enemy at their position, using randomized enemy types and weapons from lists, similar to practically all Covert Bitops games so far. The horizontal position can be changed slightly to produce variation. Spawn points can also be turned on and off by the game's story progression boolean flags. The spawned enemies are removed when leaving the area.<br><br>
+
+But this is not yet the complete picture. MW ULTRA contains horizontally long areas, and the game world might seem empty if you were to walk to the other end of an area and defeat all the enemies along the way, then walk back, and find it still empty, until you actually cross to the next area. Therefore the spawn points within that same area will also respawn enemies after enough time has passed. This requires some care: the spawn point must be far enough from the player, and the spawn point's previous enemy must actually have been defeated. This is to ensure that the player is never overwhelmed. Staying in one place will never produce a continuous stream of respawning enemies (as can happen in Hessian), so the player can proceed at their own pace.<br><br>
+
+Along with enemy spawning, item drop logic & rules were also needed. The straightforward answer is for an enemy to drop their weapon, but there are also other pickups like coins, first aid kits and armor. Similar to Hessian, it's about thinking of what the player is likely to need most at the moment, along with some randomness:<br><br>
+
+- If player doesn't yet have the enemy's weapon, it should definitely be dropped.<br>
+- If player is low on health, first aid drop probability should increase.<br>
+- If player is already carrying maximum of something or has the same melee weapon, it shouldn't be dropped.<br>
+- If the enemy can drop coins, it's a good fallback choice.<br><br>
+
+Since the last WIP update, the scrolling also got one more improvement. Rastertime would get very tight on an unaccelerated NTSC C64, leading to occasional visual glitches at the midpoint of the screen when redrawing the screen. The solution is to split the NTSC screen update to 3 parts: top, middle and bottom, instead of just top and bottom. No more glitches!<br><br>
+
+This means the REU scrolling code path could even be removed in case of severe compatibility trouble or lacking disk space, however it's preferable to keep it in, as it leaves REU-enabled machines much more free CPU time for all non-scrolling code, preventing potential slowdowns.<br><br>
+
+Now, the enemy work shall continue! Here is a work-in-progress video of the first enemies that were implemented, and fighting against them:<br><br>
+
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/wDdWASzKgv4" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>15th July 2019:</b><br><br>
 
 The initial pass through the whole of MW ULTRA's world map is complete now! It's about 750 screens split over 21 tilesets and 30 level loads.<br><br>
@@ -37,8 +67,7 @@ When creating the game world progressed, it became apparent that the game will n
 
 Now that the game world is done, it's easier to reflect on the total amount of data and memory needed, and to make a sort of mid-project postmortem on the world data-related decisions.<br><br>
 
-- Overall, the redraw-based scrolling works well and keeps CPU use lower than traditional scrolling, however there are some "problem areas" when some levels have so much color changes, that the color-RAM scrolling optimizations aren't of much use. On NTSC machines time can be tight in these spots, and so the engine got a REU optimization path for scrolling in addition to C128 & SuperCPU turbo modes. In the REU scrolling mode,
-the original scrolling routines get patched over by code that writes each room / area to the REU memory on room changes, and as the screen scrolls, the REU DMA transfer is fired for each row to quickly rewrite the screen and color RAM.<br><br>
+- Overall, the redraw-based scrolling works well and keeps CPU use lower than traditional scrolling, however there are some "problem areas" when some levels have so much color changes, that the color-RAM scrolling optimizations aren't of much use. On NTSC machines time can be tight in these spots, and so the engine got a REU optimization path for scrolling in addition to C128 & SuperCPU turbo modes. In the REU scrolling mode, the original scrolling routines get patched over by code that writes each room / area to the REU memory on room changes, and as the screen scrolls, the REU DMA transfer is fired for each row to quickly rewrite the screen and color RAM.<br><br>
 
 - Since the scrolling needs chars arranged in a certain way to match the char code and color code (done automatically by the editor), making charset animations becomes errorprone as the char order changes when the tileset gets edited. It's best to write the charset animation code only after the tileset is final, however "final" is often relative.<br><br>
 
