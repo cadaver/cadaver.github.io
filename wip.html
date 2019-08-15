@@ -35,6 +35,8 @@ Along with enemy spawning, item drop logic & rules were also needed. The straigh
 - If player is already carrying maximum of something or has the same melee weapon, it shouldn't be dropped.<br>
 - If the enemy can drop coins, it's a good fallback choice.<br><br>
 
+Something that both Metal Warrior 4 and Hessian got occasional criticism for was showing only the amount of spare magazines instead of spare rounds, similar to the original Deus Ex game. This is perhaps more realistic, but could create ambiguity. So now MW ULTRA displays rounds in magazine and amount of spare rounds, like most recent shooter games. This required removing the expanded borders in the score panel (40 column mode instead of 38), but was well worth it, as now the selected weapon is also displayed completely thanks to more available space, and there's two chars more available for each line in conversations.<br><br>
+
 Since the last WIP update, the scrolling also got one more improvement. Rastertime would get very tight on an unaccelerated NTSC C64, leading to occasional visual glitches at the midpoint of the screen when redrawing the screen. The solution is to split the NTSC screen update to 3 parts: top, middle and bottom, instead of just top and bottom. No more glitches!<br><br>
 
 This means the REU scrolling code path could even be removed in case of severe compatibility trouble or lacking disk space, however it's preferable to keep it in, as it leaves REU-enabled machines much more free CPU time for all non-scrolling code, preventing potential slowdowns.<br><br>
