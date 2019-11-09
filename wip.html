@@ -28,7 +28,7 @@ of Hessian and Steel Ranger also got the loader + EasyFlash .crt treatment, so t
 
 But now that is done, and MW ULTRA work can continue.<br><br> 
 
-The game will come out in 2020 as a joint release by <a href="http://www.psytronik.net" target=_"top">Psytronik</a> (disk version) and <a href="https://www.protovision.games" target="_top">Protovision</a> (cartridge and download versions.)<br><br>
+The game will come out in 2020 as a <a href="https://www.protovision.games/wordpress/tag/metal-warrior/" target="_top">joint release</a> by Psytronik Software (disk version) and Protovision (cartridge and download versions.)<br><br>
 
 Working in MW ULTRA's engine to get the new enemies implemented has been fairly smooth, just a few bugs related to loading code while initializing or spawning enemies needed to be ironed out, and some more AI issues. For the first time, the engine allows mixing enemy code and sprite data into the same file on the disk, which reduces the amount of separate resources to keep track of, and preserves disk space better (less half-filled sectors.) In practice, this was implemented by the sprite editor saving the sprites
 also in source code format, and the actual enemy code files just including them.<br><br>
@@ -110,9 +110,9 @@ Now that the game world is done, it's easier to reflect on the total amount of d
 
 - As no further world interactions or movement modes will be added (unless it turns out to be something absolutely vital) it's easy to take inventory of the ideas that will remain unused. It looks like there will for example be no lift platforms as in Steel Ranger. One planned idea was to have movable objects like boxes for reaching some hard-to-reach areas, but that looks not to be required either. MW ULTRA is still a traditional disk-based game that needs to keep all the engine code in RAM, and one has to be mindful of its total size. Some more advanced ideas were a hacking minigame (as in the latest Deus Ex games) or even taking control of enemy units, but these will remain just ideas as well. Therefore, the core of the gameplay will remain traditional: movement / exploration, combat (close / ranged / stealth), and advancing the story through character interactions.<br><br>
 
-That last point prompted the thought that making a C64 game cart-only could be the "next step up", almost becoming another platform, since code could be executed out of the cart ROM directly, and compromises could almost always be made to favor code speed. For example, speedcode-based scrolling. The amount of player character movements or interactions would also be much less limited, with just the cart total size as the limit.<br><br>
+That last point prompted the thought that making a C64 game cartridge-only could be the "next step up", almost becoming another platform, since code could be executed out of the cartridge ROM directly, and compromises could almost always be made to favor code speed. For example, speedcode-based scrolling. The amount of player character movements or interactions would also be much less limited, with just the cartridge total size as the limit.<br><br>
 
-Naturally, MW ULTRA will be finished as planned, being able to run both from disk and cart.<br><br>
+Naturally, MW ULTRA will be finished as planned, being able to run both from disk and cartridge.<br><br>
 
 The next step after the world map will be the enemies. In addition to just enemy sprite pixeling and behavior coding, the algorithm for spawning enemies needs to be decided on. There will certainly be enemies in fixed positions for each playthrough, but in addition it would be good to add some unpredictability, or enemies reppearing to places that were cleared already, for example the city streets. Care must just be taken to not overwhelm the player with constant respawning.<br><br>
 
@@ -311,8 +311,8 @@ This practically means that four variants of the game's loader code must exist:<
 
 - Fastloader, using custom drivecode for 1541, 1571 (almost same as 1541), 1581 and CMD FD/HD<br>
 - Fallback disk loader using Kernal routines, used for IDE64, devices like SD2IEC, and "fast drive emulation"<br>
-- EasyFlash cart ROM loader. Also includes flash save support using the EasyAPI<br>
-- GMod2 cart ROM loader. Implements save support using the 2KB EEPROM<br><br>
+- EasyFlash cartridge ROM loader. Also includes flash save support using the EasyAPI<br>
+- GMod2 cartridge ROM loader. Implements save support using the 2KB EEPROM<br><br>
 
 For disk support, the two first variants of the loader code are both included in the "LO" (loader) file that is read immediately after boot, but only one is left in the memory after initialization. The EasyFlash & GMod2 cartridge ROM loading code is rather similar, only the data layout on the cart differs due to different banking ($8000-$9fff and $a000-$bfff for EasyFlash, $8000-$9fff only for GMod2). Cartridge initialization after reset and saving differ much, though.<br><br>
 
@@ -323,27 +323,27 @@ The game main part relies on the loader routine jump addresses always being the 
 - Save a file<br><br>
 
 The disk loader was written first, so it sets the amount of available space for all of the loader variants. It would be possible to have the memory layout
-different in the cart builds, but having it the same speeds up the build process, as the main part and loadable code (which depends on the memory layout of the main part) only have to be compiled once. It also makes testing more reliable, as the amount of free memory in the same ingame situation will be the same across the disk / cart builds.<br><br>
+different in the cartridge builds, but having it the same speeds up the build process, as the main part and loadable code (which depends on the memory layout of the main part) only have to be compiled once. It also makes testing more reliable, as the amount of free memory in the same ingame situation will be the same across the disk / cartridge builds.<br><br>
 
-In practice, the cart loading code is extremely simple: just choose the correct bank, and copy bytes to the "sector buffer" in RAM at $0200-$02ff, similar to how the fastloader operates. Cart saving code is more involved, though.<br><br>
+In practice, the cartridge loading code is extremely simple: just choose the correct bank, and copy bytes to the "sector buffer" in RAM at $0200-$02ff, similar to how the fastloader operates. Cartridge saving code is more involved, though.<br><br>
 
-On EasyFlash, cart space used for saving must be erased in 64 KB sectors. This sets all the bits in the sector to "1," and they can be changed to 0's while writing, but not back without erasing again. To reduce wear on the flash memory and speed up saving, it's a good idea to use up the whole 64KB sector before starting over and erasing it again.<br><br>
+On EasyFlash, cartridge space used for saving must be erased in 64 KB sectors. This sets all the bits in the sector to "1," and they can be changed to 0's while writing, but not back without erasing again. To reduce wear on the flash memory and speed up saving, it's a good idea to use up the whole 64KB sector before starting over and erasing it again.<br><br>
 
 The EasyFlash save file system uses a 512 byte "directory" in the beginning of the save sector to mark allocations (256 bytes for file numbers per page, then 256 bytes for number of bytes in the file's last page). When a save file is overwritten, the old file must be marked as obsolete. This is based on an idea demonstrated in Per Olofsson's Ultima 4 Remastered EasyFlash I/O code: because writing a $00 byte is always legal without having to erase, it's used to mark obsolete file entries in the save directory. Similarly, $ff (the initial value of bytes in a freshly erased save sector) marks a free page.<br><br>
 
-When it's time to erase the save sector, the latest versions of all save files currently on the cart must be backed up to RAM, under the Basic ROM region ($a000-$bfff.) This presents an additional logic problem: there necessarily isn't enough free RAM for this when the game is running! Therefore the save routine must call into the game main part and ask it to deallocate (purge) loaded resource files, until there is enough free memory. The EasyAPI code that does the actual flash ROM interfacing also occupies a fixed RAM location, adjacent to where the music is located, so there is an additional rule that while saving, the currently loaded music must not take too much memory! In MW ULTRA this is not a problem, as saving always happens in the title screen.<br><br>
+When it's time to erase the save sector, the latest versions of all save files currently on the cartridge must be backed up to RAM, under the Basic ROM region ($a000-$bfff.) This presents an additional logic problem: there necessarily isn't enough free RAM for this when the game is running! Therefore the save routine must call into the game main part and ask it to deallocate (purge) loaded resource files, until there is enough free memory. The EasyAPI code that does the actual flash ROM interfacing also occupies a fixed RAM location, adjacent to where the music is located, so there is an additional rule that while saving, the currently loaded music must not take too much memory! In MW ULTRA this is not a problem, as saving always happens in the title screen.<br><br>
 
 For GMod2 the save support implementation is thankfully much simpler, as the EEPROM does not need to be erased, but can be written to word-by-word (not byte-by-byte!) Therefore the save directory format can also be different: just 3 bytes per file entry (file number, size lowbyte, size highbyte.) However, there's still the trouble of memory in the loader area running a little short, so the stack and the sector buffer are reused creatively during the save. But the GMod2 save routine does not need to deallocate game resource files.<br><br>
 
-The fastloader save and the cart saves operate on the same principle, that a specific save file must always be the same size. In MW ULTRA (same as in Hessian & Steel Ranger) this is not a problem, as there is only the configuration file, a "savegame list" which contains summary information of all saves, and finally the save files themselves, and their sizes never change. On disk, space is preallocated so that the fastloader doesn't need to handle allocation. However, the game must be prepared for the fact that on cart initial save files will not exist, so for example the configuration must be able to use valid defaults.<br><br>
+The fastloader save and the cartridge saves operate on the same principle, that a specific save file must always be the same size. In MW ULTRA (same as in Hessian & Steel Ranger) this is not a problem, as there is only the configuration file, a "savegame list" which contains summary information of all saves, and finally the save files themselves, and their sizes never change. On disk, space is preallocated so that the fastloader doesn't need to handle allocation. However, the game must be prepared for the fact that on cartridge initial save files will not exist, so for example the configuration must be able to use valid defaults.<br><br>
 
-Writing the cart images is done using two separate utilities, one for EasyFlash and one for GMod2. You can take a look at both cart loaders, and the cart writing utilities in the c64gameframework source tree:<br><br>
+Writing the cartridge images is done using two separate utilities, one for EasyFlash and one for GMod2. You can take a look at both cartridge loaders, and the cart writing utilities in the c64gameframework source tree:<br><br>
 
 Boot code & loaders:<br>
 <a href="https://github.com/cadaver/c64gameframework/blob/master/efboot.s" target="_top">efboot.s</a>
 <a href="https://github.com/cadaver/c64gameframework/blob/master/gmod2boot.s" target="_top">gmod2boot.s</a><br><br>
 
-Cart writing utilities:<br>
+Cartridge writing utilities:<br>
 <a href="https://github.com/cadaver/c64gameframework/blob/master/tools/makeef.cpp" target="_top">makeef.cpp</a>
 <a href="https://github.com/cadaver/c64gameframework/blob/master/tools/makegmod2.cpp" target="_top">makegmod2.cpp</a><br><br>
 
