@@ -18,6 +18,35 @@
 </p>
 <font face="Arial" size="2">
 <p align="justify">
+<b>9th November 2019:</b><br><br>
+
+Enemy work for MW ULTRA is well underway. Only mission area-related human enemies and boss enemies are missing now.<br><br>
+
+In the beginning October, development work was "sidetracked" a little by the upcoming <a href="http://www.psytronik.net/newsite/index.php/c64/120-mwq" target="_top">Metal Warrior Quadrilogy</a> box set to be released by Psytronik Software.
+It contains the four original Metal Warrior games updated for better loading compatibility (EasyFlash .crt downloads included), tuned for better playability, and even a few improved cutscenes here and there. The Psytronik releases
+of Hessian and Steel Ranger also got the loader + EasyFlash .crt treatment, so there was a fairly good amount of testing involved.<br><br>
+
+But now that is done, and MW ULTRA work can continue.<br><br> 
+
+The game will come out in 2020 as a joint release by <a href="http://www.psytronik.net" target=_"top">Psytronik</a> (disk version) and <a href="https://www.protovision.games" target="_top">Protovision</a> (cartridge and download versions.)<br><br>
+
+Working in MW ULTRA's engine to get the new enemies implemented has been fairly smooth, just a few bugs related to loading code while initializing or spawning enemies needed to be ironed out, and some more AI issues. For the first time, the engine allows mixing enemy code and sprite data into the same file on the disk, which reduces the amount of separate resources to keep track of, and preserves disk space better (less half-filled sectors.) In practice, this was implemented by the sprite editor saving the sprites
+also in source code format, and the actual enemy code files just including them.<br><br>
+
+Once the final human enemies are complete (this is practically just graphics work), it's on to the bosses. There's a plan for there to be 7 boss fights in total.
+As some of the boss enemies will be fairly large, they may yet present a CPU use challenge. We will see. One way to counteract possible slowdowns is to make the boss arenas only horizontally scrolling, so that the CPU use from scrolling is more predictable.<br><br>
+
+Once the bosses are also done, then it's on to filling the rest of the game world, and working the game's story in, including non-hostile NPCs, dialogue and any special events. So far disk space is not a concern, but it's only about 250 blocks free on both disk sides, so it's not like one can keep adding content endlessly!<br><br>
+
+Finally, a couple of videos from along the way:<br><br>
+
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/GVkiCYFplms" frameborder="0"></iframe><br><br>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/bV5_WpZ9DEI" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
 <b>15th August 2019:</b><br><br>
 
 Enemy work for MW ULTRA is going on, along with bugfixes, minor AI adjustments and optimizations.<br><br>
