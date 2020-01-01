@@ -48,7 +48,7 @@ Considering that the player can be firing on full auto, or using the grapple rop
 
 Some further optimization was possible in the raster interrupt code itself, particularly related to the "being late" check. This means comparing the current rasterline ($d012 value) to see if we were too late writing the $d012 target line for the next interrupt, and should already be executing its code manually right afterward. The failure to observe this leads into a glitching screen and slowdown (like in Commando) and is highly undesirable.<br><br>
 
-Previously, the code took up to 3 lines advance for checking this situation, which needed complicated math and made the code longer and slower. However, if we always acknowledge the current raster interrupt early, and check being late only after writing the target $d012 line, we only need 1 line of advance, like this, where Y register holds the target line. The next interrupt vector needs to have been written to $fffe/$ffff already:<br></p>
+Previously, the code took up to 3 lines advance for checking this situation, which needed complicated math and made the code longer and slower. However, if we always acknowledge the current raster interrupt early, and check being late only after writing the target $d012 line, we only need 1 line of advance, like this, where Y register holds the target line. The next interrupt vector needs to have been written to $fffe / $ffff already:<br></p>
 
 <pre>
 EndIrqLateCheck:sty $d012
