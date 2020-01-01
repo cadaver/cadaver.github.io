@@ -18,6 +18,73 @@
 </p>
 <font face="Arial" size="2">
 <p align="justify">
+<b>1st January 2020:</b><br><br>
+
+Project status in short: all enemies are done. All boss fights are done. The final stretch is the non-hostile characters, the story, filling the rest of the game world, testing everything, and producing all the necessary materials for the publishers.<br><br>
+
+During the enemy work, the game got two more non-standard weapons to the player's arsenal: a special version of the dart gun, which "enrages" enemies and makes them attack each other, and a "scramble tool" which does the same for mechanical enemies. The aim is for these to be one-use and quite rare, so the player has to judge carefully which enemy to "turn" for maximum effect. The turned enemy's attacks still hurt the player too, so it's also important to stay out of the crossfire!<br><br>
+
+Implementing these was straightforward, however there was one gotcha: when a turned enemy disappears from the screen and then reappears, we should store the "turned" status information, so it can be restored. Otherwise the enemy would attack the player again, as usual, and using the tool would have gone to waste. Thankfully, since the enemies use only a subset of all the weapons available to player, there was a spare bit in the "weapon number" byte stored for each enemy, which now got a use!<br><br>
+
+Implementing the boss fights was also a relatively smooth experience. The boss enemy code typically breaks the game AI rules a little; the boss usually keeps the player always "locked on" as a target, so there is no possibility for total stealth during the encounters, like for normal enemies. However the player can still hide behind cover to avoid attacks. Like written before in the Steel Ranger WIP updates, boss enemy code tends to be somewhat throwaway and very specific to the area the battle is being fought on (e.g. using hardcoded tile X or Y coordinate checks to determine boss actions), but as long as it serves its purpose, no harm done! In contrast to Steel Ranger, there are very few hardcoded patterns in the boss behaviors; they still react to player actions like ordinary enemies would, but yet have some weaknesses or delays in their strategy so that the player has a chance to win.<br><br>
+
+The game engine handled the load of the boss fights well for the most part, and no new severe bugs were encountered. It's the final boss fight which stresses the CPU most and uses the most amount of sprites onscreen at once, so that provided a good target for measuring performance and optimizing where possible.<br><br>
+
+At this stage the optimizations are mostly tied to the low-level code: outputting the logical actor sprites as C64's hardware sprites for the sprite multiplexer, preparing the sorted sprite arrays for the raster interrupts actually displaying the sprites, and then the raster interrupt code itself. Only very minor optimization opportunities are possible on the higher game logic level, like physics and collision.<br><br>
+
+The objective is to get the total amount of CPU cycles taken by the sprite display code (both main program + raster interrupts) as low as possible, while also trying to keep any multiplexer glitching, which occurs when sprites need to be reused in too "tight" formations, to a minimum.<br><br>
+
+One of the first observations was that the register $d01d (sprite X-expand bits) was being written for every sprite in the interrupt code, while it changes only rarely. For the most part it stays at all bits 0, since only some bosses and some bullet sprites use expansion. Therefore, it turned out it's OK to only write it at the very end of a multiplexer raster interrupt, after sprite X,Y coordinates, frames and colors have been written.<br><br>
+
+Doing this optimization, which already reduces the amount of CPU cycles taken by the raster interrupt code, gave possibility to several others. Now $d01d bits can be calculated during the multiplexer preparation to a zeropage temporary variable instead of storing it to a non-zeropage array for every sprite. The multiplexer interrupt code is also reduced in size, so that all entrypoints to it (depending on the starting hardware sprite) fit within a single page, and only the entrypoint jump lowbyte needs to be updated for each sprite raster interrupt.<br><br>
+
+But this was not yet all that could be done! A subroutine call (JSR + RTS) takes 12 cycles of CPU time, so trying to optimize those away is always a high priority. However MW ULTRA can't afford to unroll or duplicate code, as the level and enemy data needs all the free memory they can get. One good opportunity for JSR removal is in the loop which outputs the hardware sprites from a "logical" sprite. The bosses can consist of up to 13 sprites, so 13 subroutine calls could be removed.<br><br>
+
+In more detail, the problem is this: for every hardware sprite, a finalization step is needed, which checks the coordinate range for being within the screen, and finally "accepts" the sprite for displaying. There are two code paths: a fast path when the logical sprite contains just one hardware sprite, and a slow path when there are several. In the slow case we want to execute this finalization for every sprite, but without a JSR.<br><br>
+
+The solution turns out to be a small code self-modification. For the fast path, the finalization step is also the end of the logical sprite render process, and it should end with an RTS instruction. But for the slow path, it should loop for more hardware sprites. We put the desired jump address for the loop right after the RTS instruction, and when using the slow path, transform the RTS momentarily into a JMP instruction, and then back into RTS again when done. The self-modification wastes some cycles, but is an overall win compared to repeated JSR + RTS, saving almost 4 rasterlines when the multiplexer is fully loaded, which might already mean the difference of not skipping a frame in some tight situation.<br><br>
+
+Considering that the player can be firing on full auto, or using the grapple rope, generating more CPU slowdown just from more sprites being on the screen, it can't be guaranteed that e.g. the final boss fight would never slow down. However, especially on PAL machines the slowdowns are rare, and the REU / C128 / SCPU scrolling acceleration (when available) should eliminate them completely.<br><br>
+
+Some further optimization was possible in the raster interrupt code itself, particularly related to the "being late" check. This means comparing the current rasterline ($d012 value) to see if we were too late writing the $d012 target line for the next interrupt, and should already be executing its code manually right afterward. The failure to observe this leads into a glitching screen and slowdown (like in Commando) and is highly undesirable.<br><br>
+
+Previously, the code took up to 3 lines advance for checking this situation, which needed complicated math and made the code longer and slower. However, if we always acknowledge the current raster interrupt early, and check being late only after writing the target $d012 line, we only need 1 line of advance, like this, where Y register holds the target line. The next interrupt vector needs to have been written to $fffe/$ffff already:<br></p>
+
+<pre>
+EndIrqLateCheck:sty $d012
+                dey
+                cpy $d012                       ;Late check
+EndIrq:         dec $01                         ;Restore $01 value
+                lda irqSaveA                    ;Restore CPU registers
+                ldx irqSaveX
+                ldy irqSaveY
+                bcc EndIrqDirect                ;Act on late check result
+                rti
+EndIrqDirect:   jmp ($fffe)
+</pre>
+
+<p align="justify">
+Only two of the raster interrupts need the late check, the multiplexer interrupt, and the scorepanel split. Checks for both were combined into one, so the engine code also became smaller.<br><br>
+
+Optimizations didn't exactly even stop here: the final step was analyzing the engine code for page-crossing penalties from conditional branches crossing a page. These penalties are quite minor, yet for something repeated e.g. for each multiplexed sprite, they're better to eliminate. Page-crossing penalties from accessing variable arrays and static data had already been eliminated quite thoroughly, but how to best do it for code?<br><br>
+
+The answer turned out to be the custom-written limited C64 emulator <a href="https://github.com/cadaver/oldschoolengine2" target="_top">Oldschoolengine2</a>. It had been written for fun for the most part, but now it became definitely useful: by using it to record page crosses and dumping them to a file when execution stops, it was easy to determine where they happened most, and how code should be reorganized. Modifying the code of VICE for instance to record the same information would have been much more involved.<br><br>
+
+After these final optimizations, only the final stretch remains, to tie everything together into the finished game!<br><br>
+
+Naturally, free resources are going down: both disksides are below 200 blocks free now, and when populating the levels one has to avoid using so many different enemies at the same time that the dynamic memory allocation area would be exhausted. Also, after the enemies and bosses there are 100 actor types already used, which means just 27 left for the non-hostile story actors (as types 128-255 are used to mean items in the engine + world editor.) It *should* be enough, in contrast Hessian used 75 actor types in total, and Steel Ranger 115.<br><br>
+
+An interesting comparison is also that Hessian and Steel Ranger saw quite "scary" low-level modifications right to the end of the revision history, for example to the loader. In constrast MW ULTRA's code has had much more calendar time to mature, and therefore it's unlikely that significant late-stage changes would be needed, or that very nasty bugs would be found. This will hopefully result in a more relaxed final testing round.<br><br>
+
+Until the next update (which might already be the final one before release) ... here's a video of one of the boss fights:<br><br>
+
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/yR9J6dHEwi4" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
+<p align="justify">
 <b>9th November 2019:</b><br><br>
 
 Enemy work for MW ULTRA is well underway. Only mission area-related human enemies and boss enemies are missing now.<br><br>
@@ -46,6 +113,7 @@ Finally, a couple of videos from along the way:<br><br>
 </p>
 <br><br><br>
 
+<p align="justify">
 <b>15th August 2019:</b><br><br>
 
 Enemy work for MW ULTRA is going on, along with bugfixes, minor AI adjustments and optimizations.<br><br>
@@ -158,7 +226,7 @@ This prompted a few somewhat mad days of code size optimization, with the aim of
 
 - In a similar vein, the code for spawning bullets or other actors was expecting a 16-bit offset in world coordinates for both X and Y directions. This offset is produced by running the actor draw code in a "fake" manner without producing actual sprites for display. It operates on 8-bit pixel coordinates, which are expanded to 16-bit after the draw code has finished executing. But turns out it's more efficient to keep the spawn offset in 8-bit pixel space until the very end, when the new actor's final world coordinates are calculated and set. This practically reduced code size in every case where actor spawning was being handled.<br><br>
 
-- Sometimes subroutines just need to be used more efficiently. Case in point, drawing health bars, which could be modified to (mis)use scorepanel text printing routines. The original unoptimized code does its own drawing to the screen & color RAM instead:<br><br>
+- Sometimes subroutines just need to be used more efficiently. Case in point, drawing health bars, which could be modified to (mis)use scorepanel text printing routines. The original unoptimized code does its own drawing to the screen & color RAM instead:<br>
 
 <pre>
         ; Draw a three-segment health bar
@@ -221,7 +289,7 @@ DHB_MiddleCharOK2:
                 rts
 </pre>
 
-The optimized routine modifies the char color first, does the drawing, then restores the color to the default white needed by all status texts. There is increased subroutine use, resulting in more CPU cycles, but drawing the bars is infrequent in any case (only when player's health or experience points change):
+The optimized routine modifies the char color first, does the drawing, then restores the color to the default white needed by all status texts. There is increased subroutine use, resulting in more CPU cycles, but drawing the bars is infrequent in any case (only when player's health or experience points change):<br>
 
 <pre>
         ; Draw a three-segment health bar
@@ -643,8 +711,7 @@ to maximum (15.) Combined with a silent first frame (typically testbit + gate), 
 start from zero volume, like a proper two-frame hardrestart would do. Therefore some care is needed in composing, to set the notes to manually release early enough.
 Fortunately GoatTracker 2 can be made to mimic this kind of operation with the hardrestart ADSR parameter, and setting "gateoff timer" to 1 in all instruments.<br><br>
 
-Because notes don't always start strictly from zero volume, they blend to each other more naturally, giving the music a more organic feel. All previous Metal Warrior games that
-used the earlier music playback routines had 1-frame hardrestart as well, so it's also keeping the tradition :)<br><br>
+Because notes don't always start strictly from zero volume, they blend to each other more naturally, giving the music a more organic feel. All previous Metal Warrior games that used the earlier music playback routines had 1-frame hardrestart as well, so it's also keeping the tradition :)<br><br>
 
 The CPU and memory use gains from switching from NinjaTracker 2 to Miniplayer are minimal to tell the truth, but after using the same routine for so long (NinjaTracker 2
 was written in 2006) it was good to try something else for a change. The Miniplayer is based on some unfinished player concepts written at the same time or earlier,
