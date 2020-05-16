@@ -17,6 +17,70 @@
 </font>
 </p>
 <font face="Arial" size="2">
+
+<p align="justify">
+<b>17th May 2019:</b><br><br>
+
+This is the final WIP update for MW ULTRA. In hindsight there could have been one or two intermediate updates more, but as often happens, the amount of work needed to bring the game to completion was considerably more than estimated, and there was little extra time for writing the updates!<br><br>
+
+But now we're finally almost there, with the game content-complete and being tested.<br><br>
+
+First some bad news, the "scramble tool" mentioned in the last update, that would turn mechanical enemies to your side did not make it through, due to being hard to use especially for flying enemies, and potentially game-unbalancing. But the rage dart gun definitely remains!<br><br>
+
+The four and half months since the last update involved first getting the game to a state where all exploration and combat could be played out without the story, and the weapon damage amounts would be roughly tuned for both the player and enemies.<br><br>
+
+At the end of last year, the game had acquired a system where the enemies' damage resistance could be defined for each damage type, including flames, electricity, melee, gunfire and explosives. This allowed rather precise finetuning, but it was easy to get lost in the details. Therefore, a return to a simpler system was in order.<br><br>
+
+The final damage system turned out to just require separate resistance for lethal and nonlethal damage. Explosives are supposed to be more powerful, so they use the nonlethal resistance multiplier, which lets more damage through. This is a hack, but it works well enough in practice. A simple JavaScript utility that renders an html page of the damages on each player skill level and hits required to defeat every enemy with every weapon, turned out invaluable.<br><br>
+
+In the beginning of March, the game was finally in the state that it could be played with a reasonable difficulty curve from the beginning to end, but without the story and friendly NPCs. Only the prologue story parts existed at this point; they had already been implemented to test the story scripting capabilities. Now the remaining work was theoretically simple: to fill the remaining disk space with the rest of the story, and also implement the game's endings.<br><br>
+
+To help with implementing the story, the engine had the following features, similar to Steel Ranger, Hessian and Metal Warrior 4. Below, "script code" means just assembly code organized into resource files for runtime loading.<br><br>
+
+- Run a piece of script code each frame (tick script)<br>
+- Run a piece of script code on each area transition. Used for music overrides and NPCs following the player<br>
+- The NPC's could run a specified script code each frame, in addition to their base per-frame update<br>
+- In-world objects (trigger areas or operable switches) could run a piece of script code, either once or several times<br>
+- Take over the player character's joystick input for scripted movement<br>
+- Unhide hidden enemies placed into the level, or turn respawning of certain enemies on or off<br><br>
+
+Dialogue would typically be implemented as NPC scripts, or if it was just the player character talking, as a tick script. Displaying the dialogue and knowing when it's complete happens by calling into a dialogue subroutine each frame, with the text resource and speaking actor as parameter. The subroutine handles having multiple actors "wait their turn", checking for prerequisites like distance and the speaking actor being stationary first, and displaying the speech bubble sprite and portrait for the speaking actor. When the piece of dialogue has been shown completely, it returns with the carry flag set, and the calling script code knows to proceed to the next step.<br><br>
+
+Also like in the previous games, there was no virtual machine or proper coroutine support for the scripting, everything was just raw assembly code. This was both good and bad, good in the sense that there was practically no limit in what the story scripts can do, bad in that implementing complex scripting again became cumbersome and errorprone (despite having already been noticed as an issue during Hessian's development), and resulted in increased memory & diskspace use.<br><br>
+
+Of course, a proper virtual machine resident in the engine would also have reduced available memory, and would have been "unnecessarily" resident also during pure exploration and combat scenes. But for future projects, it's finally time to address these scripting "quality of life" issues early on and properly.<br><br>
+
+Fast forward to the end of April, and all the story parts, "lore texts" on computer terminals and endings had taken shape. Dialogue had been practically written on the fly with only a story outline to base it on, but it ended up quite fine that way. The outline had existed since Summer 2017, and though at first it was uncertain how well it would integrate into the gameplay, it turned out fine as well, with only some minor parts either simplified or improved on the fly. The total amount of loadable story, enemy & NPC code ended up as 1 megabyte of source code, which is twice as much as in Steel Ranger!<br><br>
+
+At this point disk space had been mostly exhausted, though there seemed to be plenty free when the story work started. This would mean no extra bitmap graphics, rather the endings would also stay in the same camera angle as the rest of the game. Now it was time to start testing and tweaking the final experience.<br><br>
+
+A couple of weeks into May also that was done, first producing a beta version, then the first release candidate version. Some rather scary bugs were still found, most of them resulting from optimization:<br><br>
+
+- On the 2 diskside (D64) version, a charset asset had been forgotten from the other diskside, producing an unwanted "turn disk" prompt just to load it. Diskspace was out, so what to do? Directory track to the rescue, as with Steel Ranger. Now that it was in use, the added free space allowed to improve the endings a little as well.<br><br>
+
+- Dropping down to the ground with the grapple rope and crouching immediately after would produce rubbish on the screen, due to the player's animation frame being illegal momentarily. This could in the worst case corrupt memory.<br><br>
+
+- Sprite display code would mark resource file ages to 0, which meant "unloaded", producing rare lockups if resource files would not have been aged at all before needing to deallocate some file due to lack of memory. In this case the engine would not know what to deallocate.<br><br>
+
+- If the inventory double-click mechanism (as in Steel Ranger) had been disabled, also using items by fire longpress would stop working.<br><br>
+
+- Player could jump again in mid-air if jumping precisely at the moment of head hitting the ceiling. This was due to zero Y-speed allowing the player to jump one frame late after starting to fall, and the ceiling head bump would need to reset the Y-speed to a small nonzero value instead.<br><br>
+
+- A small jeep enemy would use wrong actor slots for launching its driver into the air on destruction. There is only room for 7 "complex" / humanoid actors including the player, but the jeep also tried to use the non-complex actor slots if those had run out, resulting in corruption of actor variables and a crash. Typically noticed when firing an RPG into a mass of enemies including several jeeps.<br><br>
+
+At this point, multiple playtesters have already finished the game, so it should be rather possible, but yet challenging to complete. Now all that remains are some more potential small fixes / tuning, and then finally getting the game out!<br><br>
+
+It has been a long journey to get to this point, but the end result should be worth it.<br><br>
+
+In the meanwhile, here's the main theme (title screen) track being played in the sound test program, with rastertime shown, and the very beginning of the game, with first half of the prologue:<br><br>
+
+<center>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/R8RyCk0qCnc" frameborder="0"></iframe><br><br>
+<iframe width="677" height="380" src="https://www.youtube.com/embed/Jp9kW-lvke8" frameborder="0"></iframe><br><br>
+</center>
+</p>
+<br><br><br>
+
 <p align="justify">
 <b>1st January 2020:</b><br><br>
 
