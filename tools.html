@@ -41,6 +41,33 @@ for lowlevel support.
 
 <p align="justify">
 <font size="4">
+Covert Bitops Loadersystem V3.0
+</font>
+</p>
+<p align="justify">
+New version of the loadersystem that is designed for a small runtime and one-time only
+initialization, but is more limited than V2.x. Based on the loader used in MW ULTRA.
+Also free to use and customize for all kinds of C64 productions.
+Differences / limitations compared to V2.x:
+</p>
+<p align="justify">
+<li>Separate fastloader protocol (ELoad) on SD2IEC</li>
+<li>Only supports 2-bit fastload transfer protocol</li>
+<li>Only supports 2-letter hexadecimal filenames</li>
+<li>No built-in load under IO support</li>
+<li>Sprite Y-range on screen can be set to allow loading with sprites on</li>
+<li>One-time init, runtime part is less than one page of memory</li>
+<li>Files to be saved must be preallocated on disk</li>
+<li>For performance, desired $01 value for main program is assumed to be $35 (Kernal off)</li>
+<li>Modular source code. Full file loading (compressed/uncompressed) as separate modules</li>
+</p>
+<p align="justify">
+<a href="tools/loader30.zip">Download</a><br>
+<br>
+</p>
+
+<p align="justify">
+<font size="4">
 Covert Bitops Loadersystem V2.29
 </font>
 </p>
@@ -58,6 +85,7 @@ for details</li>
 <li>Loading of unpacked files, or those compressed with Exomizer 1/2/3 or pucrunch</li>
 <li>Option to use 2-bit fastloader protocol (faster speed, but delays interrupts
 and no sprites allowed)</li>
+</p>
 <p align="justify">
 <b>V2.29 fixes occasional hang on NTSC machines with the 1-bit protocol.</b><br>
 <br>
@@ -77,7 +105,7 @@ DASM Win32 & Linux port
 <p align="justify">
 This is an unofficial port of the DASM crossassembler by Matthew Dillon
 (modified by Olaf Seibert), with some fixes, including better error
-handling. See also the <a href="http://dasm-dillon.sourceforge.net/" 
+handling. See also the <a href="https://dasm-assembler.github.io/"
 target="_top">DASM official home page</a>, the latest version from there 
 should compile CovertBitops productions also, when used in conjunction with an
 updated C64 Tools collection.
