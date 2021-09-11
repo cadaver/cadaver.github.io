@@ -176,7 +176,7 @@ V2.04 fixes transpose not resetting when playback is started from the beginning.
 
 <p align="justify">
 <font size="4">
-GoatTracker2 to NinjaTracker2 converter V1.02
+GoatTracker2 to NinjaTracker2 converter V1.03
 </font>
 </p>
 <p align="justify">
@@ -184,7 +184,8 @@ Utility that converts GoatTracker2 songs to NinjaTracker V2.03+ format with some
 limitations. Songs that work within the limitations can then be played back with
 less memory and rastertime consumption.
 <br><br>
-V1.02 optimizes saving instrument vibrato to wavetables.
+V1.03 adds a source format converter to not have to use the native NinjaTracker2
+to save playable modules.
 <br><br>
 <a href="tools/gt2nt2.zip">Download</a>
 <br><br>
@@ -201,6 +202,21 @@ Contains also sound effect support. No editor, published only as source code.
 Includes a GoatTracker2 song conversion tool similar to the GT2 -> NT2 converter.
 <br><br>
 <a href="https://github.com/cadaver/miniplayer" target="_top">Github repository</a>
+<br><br>
+</p>
+
+<p align="justify">
+<font size="4">
+MiniPlayer 2
+</font>
+</p>
+<p align="justify">
+An updated version of the original MiniPlayer, aiming at 9-10 rasterline execution time.
+Does not skip wavetable execution when reading new note data for better music quality, and 
+adds ADSR change commands, but requires a large zeropage variable area and page alignment
+of music data; music data may be larger than in the original MiniPlayer.
+<br><br>
+<a href="https://github.com/cadaver/miniplayer2" target="_top">Github repository</a>
 <br><br>
 </p>
 
