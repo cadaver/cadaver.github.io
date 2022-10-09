@@ -187,11 +187,18 @@ controller error code ($02-$0f) are sent.
 
 Finally, we loop back to wait for a file number.
 
+Negative file numbers are used to rescan IFFL, for example disk side changes.
+This is demonstrated in the example by wiping the picture memory, rescanning,
+and reloading the picture. After a rescan request (sent directly with SENDBYTE), 
+the C64 side must receive a byte (GETBYTE) and check that it's zero.
+
 
 5. The sourcecode
 
 ;-------------------------------------------------------------------------------
 ; IFFL-system example with 2-bit transfer by Cadaver 9/2004
+; Unitialized Y register fixed in 3/2015
+; Error send fix & possibility to rescan added 10/2022
 ;
 ; Use at own risk!
 ;-------------------------------------------------------------------------------
@@ -213,14 +220,33 @@ start:          jsr initloader
                 jsr initmusicplayback
                 lda #$10                ;Try to load some nonexistent file -
                 jsr loadfile            ;should be harmless as long file number
-                lda #$01                ;&lt; MAXFILES
+reload:         lda #$01                ;&lt; MAXFILES
                 jsr loadfile            ;Load file $01 - picture
                 bcs error
                 jsr showpicture
-done:           jmp done                ;Loop endlessly, showing the pic
+                lda #$20                ;Clear picture memory area
+                sta clearsta+2
+                ldx #$00
+                txa
+clearsta:       sta $2000,x
+                inx
+                bne clearsta
+delay:          ldy $d011
+                bpl delay
+delay2:         ldy $d011
+                bmi delay2
+                inc clearsta+2
+                ldy clearsta+2
+                cpy #$60
+                bcc clearsta
+                lda #$80                ;Perform IFFL reinit (negative filenumber)
+                jsr sendbyte
+                jsr getbyte             ;Then read byte to see it initialized OK
+                cmp #$00
+                beq reload
 
 error:          sta $d020               ;If any error, store errorcode to border and
-                jmp done                ;loop endlessly
+                jmp error               ;loop endlessly
 
 initmusicplayback:
                 sei
@@ -282,6 +308,9 @@ copycolors:     lda $6400,x             ;Copy the colorscreen
 ; Call LOADFILE with filenumber in A to load. Returncode:C=0 OK, C=1 error
 ; Valid filenumbers are $00-$7e.
 ;
+; To rescan IFFL, call SENDBYTE with negative value. After that, you must call
+; GETBYTE and see that the returned value is zero to denote successful rescan.
+;
 ; Use any Kernal file I/O to detach the IFFL drivecode.
 ;
 ; 2-bit transfer is used so sprites must be off and IRQs can get delayed by a
@@ -290,7 +319,7 @@ copycolors:     lda $6400,x             ;Copy the colorscreen
 
         ;Loader defines
 
-RETRIES         = $05           ;Retries when reading a sector
+RETRIES         = $20           ;Retries when reading a sector
 MAXFILES        = $7f           ;Max.127 files in the IFFL file
 MW_DATA_LENGTH  = $20           ;Bytes in one M/W command
 
@@ -455,7 +484,8 @@ il_isntsc:      lda #&lt;il_nmi            ;Set NMI vector (let NMI trigger once
                 sta ifl_senddata+2
                 lda #(drivecodeend_drv-drivecode_drv+MW_DATA_LENGTH-1)/MW_DATA_LENGTH
                 sta loadtempreg         ;Number of "packets" to send
-                bne ifl_nextpacket
+                ldy #$00
+                beq ifl_nextpacket
 ifl_sendmw:     lda ifl_mwstring,x      ;Send M-W command (backwards)
                 jsr ciout
                 dex
@@ -699,7 +729,7 @@ drv_nextdirsct: ldx drvbuf+1
                 lda drvbuf              ;Any more dir sectors?
                 bne drv_dirsctloop      ;Errorcode $10 not used by 1541
                 lda #$10                ;so use it as "IFFL file not found"
-drv_initfail:   jsr sendbyte            ;Send error code & exit through
+drv_initfail:   jsr drv_sendbyte        ;Send error code & exit through
                 jmp initialize          ;INITIALIZE
 
 drv_found:      lda drvbuf+1,y          ;IFFL datafile found, get its start
@@ -728,9 +758,9 @@ drv_scanloop:   lda #$e0
 drv_scanwait:   lda buf2cmd
                 bmi drv_scanwait
                 sei
-                cmp #$02                ;If error, abort
+                cmp #$02                ;If error, retry
                 bcs drv_initfail
-                lda buf2trk             ;Keep calling the job until the file is
+drv_scanok:     lda buf2trk             ;Keep calling the job until the file is
                 bne drv_scanloop        ;at an end
                 jsr drv_sendbyte        ;Now A=0, send the byte so that C64
                                         ;knows the file was scanned successfully
@@ -738,6 +768,7 @@ drv_scanwait:   lda buf2cmd
 drv_mainloop:   cli                     ;Allow interrupts so drive may stop
                 jsr drv_getbyte         ;Get file number from C64
                 tay                     ;(file number also now in drvtemp2)
+                bmi drv_reinit          ;If negative filenumber, rescan IFFL file
                 lda drvoffstbl,y        ;Get file start offset
                 sta drv_mainsendstart+1
                 lda drvtrktbl,y         ;Get file start track & sector
@@ -794,6 +825,8 @@ drv_mainfilefail:
                 jsr drv_sendbyte
                 jmp drv_mainloop        ;Then go back to main to wait for
                                         ;file number
+
+drv_reinit:     jmp drv_init
 
 ;-------------------------------------------------------------------------------
 ; Subroutine: send byte in A to C64 using 2-bit protocol (no IRQs allowed)
@@ -914,6 +947,7 @@ drivecodeend_c64:
 
 loadbuffer:     ds.b 254,0
 bufferstatus:   dc.b 0
+
 
 
 6. Conclusion and further references
